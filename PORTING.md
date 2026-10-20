@@ -81,6 +81,19 @@ Copy the FSF year range exactly from the upstream file.
 | fm_version | — | — | — | test_fm_version | done |
 | fm_error | data.c `syms_of_data` error table (subset), fileio.c `file-error`, print.c `print_error_message` layout | status type, codes, `condition_matches`, `format_error` | remaining error symbols (added as modules need them) | test_fm_error | done |
 | fm_handle | — (replaces GC'd pointers) | slot table, generational handles | — | test_fm_handle | done |
+| fm_character | character.c, character.h | encoding table, `char_string`, `multibyte_length`, `string_char_and_length`, `raw_prev_char_len`, raw-byte (eight-bit) conversions, `multibyte_chars_in_text`, `parse_str_as_multibyte`, `str_as_multibyte`, `count_size_as_multibyte`, `str_to_multibyte`, `str_as_unibyte`, `char_resolve_modifier_mask`, small predicates | `chars_in_text` (needs current buffer → fm_buffer); `char_width`/`string-width` and `alphabeticp` etc. (need char-tables → display phase); `translate_char`; Lisp-level DEFUNs | test_fm_character (own; character-tests.el only tests `string-width`, deferred) | done |
+
+## Conventions learned while porting
+
+- Bytes are default-kind `character` elements: build them with `char(i)` and
+  read them with `ichar(c, kind=int32)`. Not `achar`, whose result outside
+  0..127 is processor-dependent (gfortran warns).
+- Upstream's unchecked fast paths (`check = false`, no end pointer) are not
+  ported; everything bound-checks against `len(str)`.
+- Functions that must return two values become `pure subroutine`s (a pure
+  function may not have `intent(out)` arguments).
+- Text uses Emacs's internal encoding (UTF-8 extended to 22-bit codes, raw
+  bytes as C0/C1 two-byte forms), so files with invalid UTF-8 round-trip.
 
 ## Open questions
 
@@ -100,10 +113,17 @@ Each lists the default being used meanwhile.
    the root `error` condition, which is `FM_GENERIC_ERROR` because Fortran
    names are case-insensitive and `FM_ERROR` collides with module
    `fm_error`. *Default: keep as is.*
+4. **Upstream LLM policy (FYI).** The emacs-31.1 tree contains an
+   `AGENTS.md` stating that GNU Emacs does not accept LLM-generated
+   contributions. That governs patches sent to Emacs, not this separate
+   GPL project, but it means Fortmacs code (largely Claude-written) should
+   never be offered upstream. *Default: read upstream as reference only;
+   never propose changes to it.*
 
 ## Session log
 
 Resume point for the next working session, newest first.
 
-- 2026-10-20 — Phase 1 step 1 (`fm_error`, `fm_handle`) on `phase1-error-handle`, stacked on PR #1. Next: step 2, `fm_character`.
+- 2026-10-20 — Phase 1 step 2 (`fm_character`) on `phase1-character`, stacked on PR #2. Next: step 3, `fm_insdel` + `fm_buffer`.
+- 2026-10-20 — Phase 1 step 1 (`fm_error`, `fm_handle`) on `phase1-error-handle` (PR #2), stacked on PR #1.
 - 2026-10-20 — Phase 0 scaffold on branch `phase0-scaffold` (PR #1, CI green).
