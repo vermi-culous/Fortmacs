@@ -79,6 +79,8 @@ Copy the FSF year range exactly from the upstream file.
 | Module | Upstream | Ported | Deferred | Tests | State |
 |---|---|---|---|---|---|
 | fm_version | — | — | — | test_fm_version | done |
+| fm_error | data.c `syms_of_data` error table (subset), fileio.c `file-error`, print.c `print_error_message` layout | status type, codes, `condition_matches`, `format_error` | remaining error symbols (added as modules need them) | test_fm_error | done |
+| fm_handle | — (replaces GC'd pointers) | slot table, generational handles | — | test_fm_handle | done |
 
 ## Open questions
 
@@ -94,9 +96,14 @@ Each lists the default being used meanwhile.
    `lread.c:intern`) referenced by handle, and a tagged `value_type`
    holding nil / integer / symbol / string / list-of-values, with explicit
    free. To be confirmed before Phase 1 step 5.*
+3. **Error-code naming.** Error codes are `FM_<SYMBOL>` parameters, except
+   the root `error` condition, which is `FM_GENERIC_ERROR` because Fortran
+   names are case-insensitive and `FM_ERROR` collides with module
+   `fm_error`. *Default: keep as is.*
 
 ## Session log
 
 Resume point for the next working session, newest first.
 
-- 2026-10-20 — Phase 0 scaffold on branch `phase0-scaffold`.
+- 2026-10-20 — Phase 1 step 1 (`fm_error`, `fm_handle`) on `phase1-error-handle`, stacked on PR #1. Next: step 2, `fm_character`.
+- 2026-10-20 — Phase 0 scaffold on branch `phase0-scaffold` (PR #1, CI green).

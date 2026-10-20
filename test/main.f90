@@ -25,6 +25,8 @@ program tester
    use testdrive, only: run_testsuite, run_selected, new_testsuite, &
                         testsuite_type, select_suite
    use test_fm_version, only: collect_fm_version
+   use test_fm_error, only: collect_fm_error
+   use test_fm_handle, only: collect_fm_handle
    implicit none(type, external)
 
    ! test-drive's interfaces take default integers.
@@ -35,7 +37,9 @@ program tester
 
    stat = 0
    testsuites = [ &
-                new_testsuite("fm_version", collect_fm_version) &
+                new_testsuite("fm_version", collect_fm_version), &
+                new_testsuite("fm_error", collect_fm_error), &
+                new_testsuite("fm_handle", collect_fm_handle) &
                 ]
 
    call get_argument(1, suite_name)
