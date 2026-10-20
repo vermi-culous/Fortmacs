@@ -39,7 +39,8 @@ contains
                   new_unittest("stale-after-reuse", test_stale_after_reuse), &
                   new_unittest("double-release", test_double_release), &
                   new_unittest("growth", test_growth), &
-                  new_unittest("foreign-handle", test_foreign) &
+                  new_unittest("foreign-handle", test_foreign), &
+                  new_unittest("handle-of-slot", test_handle_of) &
                   ]
    end subroutine collect_fm_handle
 
@@ -172,5 +173,23 @@ contains
       call a%acquire(h)
       call check(error,.not. b%is_live(h), "empty table resolved a handle")
    end subroutine test_foreign
+
+   subroutine test_handle_of(error)
+      type(error_type), allocatable, intent(out) :: error
+      type(slot_table_type) :: t
+      type(handle_type) :: h, g
+      type(status_type) :: st
+
+      call t%acquire(h)
+      g = t%handle_of(h%index)
+      call check(error, g%index == h%index .and. g%generation == h%generation, "wrong handle")
+      if (allocated(error)) return
+      call t%release(h, st)
+      g = t%handle_of(h%index)
+      call check(error, g%index, 0_int64)
+      if (allocated(error)) return
+      g = t%handle_of(99_int64)
+      call check(error, g%index, 0_int64)
+   end subroutine test_handle_of
 
 end module test_fm_handle

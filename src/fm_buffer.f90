@@ -32,10 +32,12 @@
 !> `buffers(i)` with `i` from `resolve_buffer`, and `cur` is the slot of
 !> the current buffer.  Everything else should go through the procedures.
 !>
+!> `kill-buffer` and `erase-buffer` need fm_marker and fm_insdel, which
+!> themselves use this module, so they are implemented in the submodule
+!> fm_buffer_ops (fm_buffer_ops.f90).
+!>
 !> Deferred: indirect buffers, buffer-local variables, overlays, undo,
-!> file visiting and locking, hooks, `erase-buffer` and the marker part
-!> of `kill-buffer` (they need fm_insdel/fm_marker; they will live in a
-!> submodule to avoid a module cycle).
+!> file visiting and locking, and hooks.
 module fm_buffer
    use, intrinsic :: iso_fortran_env, only: int32, int64
    use fm_error, only: status_type, set_error, FM_GENERIC_ERROR, &
@@ -67,6 +69,9 @@ module fm_buffer
       integer(int64) :: unchanged_modified = 1, overlay_unchanged_modified = 1
       logical :: inhibit_shrinking = .false.
       logical :: redisplay = .false.
+      !> BUF_MARKERS: first marker slot of this text's marker chain (0 if
+      !> none); the chain itself lives in fm_marker.
+      integer(int64) :: markers = 0
    end type buffer_text_type
 
    !> Port of the parts of buffer.h:struct buffer used so far.
@@ -99,10 +104,26 @@ module fm_buffer
    integer(int64) :: alist_count = 0
    integer(int64) :: last_serial = 0
 
-   public :: resolve_buffer, buffer_live_p, current_buffer
+   interface
+      !> Kill buffer `h`: unchain its markers, free its text, and if it was
+      !> current make another buffer current.  Port of the core of
+      !> buffer.c:Fkill_buffer.  (In fm_buffer_ops.)
+      module subroutine kill_buffer(h, status)
+         type(handle_type), intent(in) :: h
+         type(status_type), intent(out) :: status
+      end subroutine kill_buffer
+
+      !> Widen and delete all text of the current buffer.
+      !> Port of buffer.c:Ferase_buffer.  (In fm_buffer_ops.)
+      module subroutine erase_buffer(status)
+         type(status_type), intent(out) :: status
+      end subroutine erase_buffer
+   end interface
+
+   public :: resolve_buffer, buffer_live_p, current_buffer, buffer_handle
    public :: get_buffer, get_buffer_create, generate_new_buffer_name
    public :: buffer_name, buffer_last_name, rename_buffer, buffer_list
-   public :: set_buffer, kill_buffer
+   public :: set_buffer, kill_buffer, erase_buffer
    public :: buffer_modified_p, restore_buffer_modified_p, &
              buffer_modified_tick, buffer_chars_modified_tick
    public :: barf_if_buffer_read_only, set_buffer_read_only
@@ -146,6 +167,14 @@ contains
          end if
       end do
    end function current_buffer
+
+   !> Handle of the live buffer in slot `i`, or the null handle.
+   function buffer_handle(i) result(h)
+      integer(int64), intent(in) :: i
+      type(handle_type) :: h
+
+      h = table%handle_of(i)
+   end function buffer_handle
 
    !> Live buffer named `name`, or the null handle.
    !> Port of buffer.c:Fget_buffer (string argument).
@@ -368,41 +397,6 @@ contains
       cur = i
    end subroutine set_buffer
 
-   !> Kill buffer `h` and free its text.  If it was current, the most
-   !> recent other live, non-hidden buffer becomes current (creating
-   !> *scratch* if there is none), as buffer.c:other_buffer_safely does.
-   !> Port of the core of buffer.c:Fkill_buffer; hooks, processes,
-   !> windows, markers and indirect buffers are not handled yet.
-   subroutine kill_buffer(h, status)
-      type(handle_type), intent(in) :: h
-      type(status_type), intent(out) :: status
-      type(handle_type) :: other
-      integer(int64) :: i, k
-      logical :: was_current
-
-      call resolve_buffer(h, i, status)
-      if (.not. status%ok()) return
-      was_current = i == cur
-
-      buffers(i)%last_name = buffers(i)%name
-      call alist_remove(h)
-      call table%release(h, status)
-      if (.not. status%ok()) return
-      if (allocated(buffers(i)%text%beg)) deallocate (buffers(i)%text%beg)
-      buffers(i) = buffer_type()
-
-      if (.not. was_current) return
-      cur = 0
-      do k = alist_count, 1, -1
-         if (buffers(alist(k)%index)%name(1:1) /= " ") then
-            cur = alist(k)%index
-            return
-         end if
-      end do
-      call get_buffer_create("*scratch*", other, status)
-      if (status%ok()) cur = other%index
-   end subroutine kill_buffer
-
    subroutine alist_append(h)
       type(handle_type), intent(in) :: h
       type(handle_type), allocatable :: grown(:)
@@ -416,19 +410,6 @@ contains
       alist_count = alist_count + 1
       alist(alist_count) = h
    end subroutine alist_append
-
-   subroutine alist_remove(h)
-      type(handle_type), intent(in) :: h
-      integer(int64) :: k
-
-      do k = 1, alist_count
-         if (alist(k)%index == h%index .and. alist(k)%generation == h%generation) then
-            alist(k:alist_count - 1) = alist(k + 1:alist_count)
-            alist_count = alist_count - 1
-            return
-         end if
-      end do
-   end subroutine alist_remove
 
    ! ------------------------------------------------------------------
    ! Modification state

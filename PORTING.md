@@ -85,9 +85,10 @@ Copy the FSF year range exactly from the upstream file.
 | fm_version | — | — | — | test_fm_version | done |
 | fm_error | data.c `syms_of_data` error table (subset), fileio.c `file-error`, print.c `print_error_message` layout | status type, codes, `condition_matches`, `format_error` | remaining error symbols (added as modules need them) | test_fm_error | done |
 | fm_handle | — (replaces GC'd pointers) | slot table, generational handles | — | test_fm_handle | done |
+| fm_buffer_ops (submodule of fm_buffer) | buffer.c | `kill-buffer` (unchains markers, clears the position cache), `erase-buffer` (with inline `widen`) | hooks, windows, processes, overlays, labeled restrictions | test_fm_buffer, test_fm_marker | done |
 | fm_buffer | buffer.c, buffer.h (+ intervals.c `temp_set_point_both`, lisp.h `modiff_incr`) | struct buffer_text / struct buffer (subset), registry, `get-buffer`, `get-buffer-create`, `generate-new-buffer-name`, `buffer-name`, `buffer-last-name`, `rename-buffer`, `buffer-list`, `set-buffer`, `kill-buffer` (core), `buffer-modified-p`, `restore-buffer-modified-p`, modified ticks, `barf-if-buffer-read-only`, BUF_BYTE_ADDRESS / FETCH_BYTE / FETCH_CHAR / next/prev char len, BUF_COMPUTE_UNCHANGED | indirect buffers, buffer-local vars, overlays, undo, files/locking, hooks, `autosaved` state, `inhibit-read-only`, `erase-buffer`, marker/window parts of `kill-buffer`, `other-buffer` ordering | test_fm_buffer (ports bug27966 and the file-independent parts of test-buffer-modifications, test-restore-buffer-modified-p, test-buffer-chars-modified-ticks) | done |
-| fm_marker | marker.c | `buf_charpos_to_bytepos`, `buf_bytepos_to_charpos`, position cache, CHAR_TO_BYTE / BYTE_TO_CHAR | marker objects (step 4) | via test_fm_insdel | partial |
-| fm_insdel | insdel.c | gap motion, `make_gap` (larger/smaller), `insert`, `insert_char`, `insert_before_markers`, `insert_1_both`, `adjust_point`, `del_range`, `del_range_1/_byte/_both/_2`, `modify_text`, `prepare_to_modify_buffer` (read-only check) | marker adjustment, intervals, undo, change hooks, compositions, quit during gap motion, `copy_text`, `insert_from_string/buffer`, `replace_range` | test_fm_insdel (own; no upstream insdel-tests.el) | partial |
+| fm_marker | marker.c (+ alloc.c `Fmake_marker`) | conversion with cache and marker hints, `make-marker`, `marker-buffer`, `marker-position`, `marker_byte_position`, `marker-last-position`, `set-marker` (integer and marker positions), `set_marker_restricted(_both)`, `set_marker_both`, `detach_marker`, `unchain_marker`, `copy-marker`, insertion types, `count_markers`; `free_marker` (ours: no GC) | `build_marker` after long scans (would leak without GC), `need_adjustment` | test_fm_marker (marker-tests.el needs windows; its Bug#24368 point is ported as set-marker-from-other-buffer) | done |
+| fm_insdel | insdel.c | gap motion, `make_gap` (larger/smaller), `insert`, `insert_char`, `insert_before_markers`, `insert_1_both`, `adjust_point`, `adjust_markers_for_insert/delete`, `del_range`, `del_range_1/_byte/_both/_2`, `modify_text`, `prepare_to_modify_buffer` (read-only check) | intervals, overlays, undo, change hooks, compositions, quit during gap motion, `copy_text`, `insert_from_string/buffer`, `replace_range` | test_fm_insdel (own; no upstream insdel-tests.el) | partial |
 | fm_character | character.c, character.h | encoding table, `char_string`, `multibyte_length`, `string_char_and_length`, `raw_prev_char_len`, raw-byte (eight-bit) conversions, `multibyte_chars_in_text`, `parse_str_as_multibyte`, `str_as_multibyte`, `count_size_as_multibyte`, `str_to_multibyte`, `str_as_unibyte`, `char_resolve_modifier_mask`, small predicates | `chars_in_text` (needs current buffer → fm_buffer); `char_width`/`string-width` and `alphabeticp` etc. (need char-tables → display phase); `translate_char`; Lisp-level DEFUNs | test_fm_character (own; character-tests.el only tests `string-width`, deferred) | done |
 
 ## Conventions learned while porting
@@ -101,6 +102,10 @@ Copy the FSF year range exactly from the upstream file.
   function may not have `intent(out)` arguments).
 - fpm tree-shakes the library: a module is only compiled once something
   (a test or the app) uses it, so register a module's test suite at once.
+- Procedures in a submodule can't call *private* parent procedures that
+  the parent itself never uses: gfortran drops them (link error). Put such
+  helpers in the submodule.
+- Objects are freed explicitly: every `make_marker` needs a `free_marker`.
 - Registry slots are reused after kill; any cache keyed by slot must also
   check `buffers(i)%serial` (see the regression test in test_fm_insdel).
 - Text uses Emacs's internal encoding (UTF-8 extended to 22-bit codes, raw
@@ -139,7 +144,8 @@ Each lists the default being used meanwhile.
 
 Resume point for the next working session, newest first.
 
-- 2026-10-20 — Phase 1 step 3 (`fm_buffer`, `fm_insdel`, conversion half of `fm_marker`) on `phase1-buffer`, stacked on PR #3. Next: step 4, marker objects.
+- 2026-10-20 — Phase 1 step 4 (marker objects, marker adjustment, `kill-buffer`/`erase-buffer` submodule) on `phase1-markers`, stacked on PR #4. Next: step 5, the value model (open question 2), then intervals/text properties.
+- 2026-10-20 — Phase 1 step 3 (`fm_buffer`, `fm_insdel`, conversion half of `fm_marker`) on `phase1-buffer` (PR #4).
 - 2026-10-20 — Phase 1 step 2 (`fm_character`) on `phase1-character` (PR #3).
 - 2026-10-20 — Phase 1 step 1 (`fm_error`, `fm_handle`) on `phase1-error-handle` (PR #2), stacked on PR #1.
 - 2026-10-20 — Phase 0 scaffold on branch `phase0-scaffold` (PR #1, CI green).

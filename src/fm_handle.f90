@@ -65,6 +65,7 @@ module fm_handle
       procedure :: release => table_release
       procedure :: resolve => table_resolve
       procedure :: is_live => table_is_live
+      procedure :: handle_of => table_handle_of
       procedure :: capacity => table_capacity
       procedure :: count => table_count
    end type slot_table_type
@@ -148,6 +149,19 @@ contains
       if (.not. self%live(h%index)) return
       table_is_live = self%generations(h%index) == h%generation
    end function table_is_live
+
+   !> The current handle of live slot `i`, or the null handle.
+   pure function table_handle_of(self, i) result(h)
+      class(slot_table_type), intent(in) :: self
+      integer(int64), intent(in) :: i
+      type(handle_type) :: h
+
+      h = handle_type(0, 0)
+      if (.not. allocated(self%generations)) return
+      if (i < 1 .or. i > self%used) return
+      if (.not. self%live(i)) return
+      h = handle_type(i, self%generations(i))
+   end function table_handle_of
 
    !> Number of payload slots the owner must provide (highest index in use
    !> can never exceed this).

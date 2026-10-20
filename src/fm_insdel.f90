@@ -26,8 +26,8 @@
 !> is given in the buffer's own representation (multibyte text for a
 !> multibyte buffer); `insert_char` encodes a single character.
 !>
-!> Deferred until their subsystems exist: marker adjustment (step 4),
-!> interval/text-property offsets, undo recording, change hooks and
+!> Deferred until their subsystems exist: interval/text-property offsets,
+!> overlay adjustment, undo recording, change hooks and
 !> `inhibit-modification-hooks`, compositions, tree-sitter, quitting
 !> in the middle of a gap move, `copy_text` conversions, `replace_range`
 !> and `insert_from_buffer`.
@@ -39,7 +39,7 @@ module fm_insdel
    use fm_buffer, only: buffers, cur, BEG, BUF_BYTES_MAX, GAP_BYTES_DFL, &
                         GAP_BYTES_MIN, modiff_incr, buf_compute_unchanged, &
                         buf_bytes, barf_if_buffer_read_only
-   use fm_marker, only: char_to_byte, byte_to_char
+   use fm_marker, only: char_to_byte, byte_to_char, markers
    implicit none(type, external)
    private
 
@@ -296,13 +296,66 @@ contains
          if (t%z - t%gpt < t%end_unchanged) t%end_unchanged = t%z - t%gpt
       end associate
 
-      ! adjust_markers_for_insert (uses before_markers) and offset_intervals
-      ! / set_text_properties (uses inherit) are pending; see the module doc.
-      ! The no-op reference keeps the interface stable without warnings.
-      if (inherit .or. before_markers) continue
+      call adjust_markers_for_insert(buffers(cur)%pt, buffers(cur)%pt_byte, &
+                                     buffers(cur)%pt + nchars, buffers(cur)%pt_byte + nbytes, &
+                                     before_markers)
+
+      ! offset_intervals / set_text_properties (which use `inherit`) are
+      ! pending; the no-op reference keeps the interface without a warning.
+      if (inherit) continue
 
       call adjust_point(nchars, nbytes)
    end subroutine insert_1_both
+
+   !> Relocate the current buffer's markers for an insertion spanning
+   !> `from`..`to`.  Markers at the insertion point advance only if their
+   !> insertion type is t or `before_markers` is set.
+   !> Port of insdel.c:adjust_markers_for_insert.
+   subroutine adjust_markers_for_insert(from, from_byte, to, to_byte, before_markers)
+      integer(int64), intent(in) :: from, from_byte, to, to_byte
+      logical, intent(in) :: before_markers
+      integer(int64) :: m, nchars, nbytes
+
+      nchars = to - from
+      nbytes = to_byte - from_byte
+      m = buffers(cur)%text%markers
+      do while (m /= 0)
+         associate (mk => markers(m))
+            if (mk%bytepos == from_byte) then
+               if (mk%insertion_type .or. before_markers) then
+                  mk%bytepos = to_byte
+                  mk%charpos = to
+               end if
+            else if (mk%bytepos > from_byte) then
+               mk%bytepos = mk%bytepos + nbytes
+               mk%charpos = mk%charpos + nchars
+            end if
+            m = mk%next
+         end associate
+      end do
+   end subroutine adjust_markers_for_insert
+
+   !> Relocate the current buffer's markers for a deletion of
+   !> `from`..`to`: markers inside move to `from`, markers after shift.
+   !> Port of insdel.c:adjust_markers_for_delete.
+   subroutine adjust_markers_for_delete(from, from_byte, to, to_byte)
+      integer(int64), intent(in) :: from, from_byte, to, to_byte
+      integer(int64) :: m
+
+      m = buffers(cur)%text%markers
+      do while (m /= 0)
+         associate (mk => markers(m))
+            if (mk%charpos > to) then
+               mk%charpos = mk%charpos - (to - from)
+               mk%bytepos = mk%bytepos - (to_byte - from_byte)
+            else if (mk%charpos > from) then
+               mk%charpos = from
+               mk%bytepos = from_byte
+            end if
+            m = mk%next
+         end associate
+      end do
+   end subroutine adjust_markers_for_delete
 
    !> Move point by `nchars`/`nbytes`.  Port of insdel.c:adjust_point.
    subroutine adjust_point(nchars, nbytes)
@@ -407,7 +460,9 @@ contains
 
       if (present(deleted)) deleted = buf_bytes(buffers(cur), from_byte, to_byte)
 
-      ! record_delete, adjust_markers_for_delete: pending.
+      ! record_delete: pending (no undo yet).
+      ! Relocate all markers pointing into the new, larger gap.
+      call adjust_markers_for_delete(from, from_byte, to, to_byte)
 
       associate (b => buffers(cur), t => buffers(cur)%text)
          call modiff_incr(t%modiff, nchars_del)
