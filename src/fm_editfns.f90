@@ -44,6 +44,7 @@ module fm_editfns
    use fm_marker, only: char_to_byte, byte_to_char, buf_charpos_to_bytepos, &
                         markers, resolve_marker, make_marker, set_marker_both
    use fm_insdel, only: insert, del_range, del_range_1
+   use fm_search, only: scan_newline_from_point, find_before_next_newline
    implicit none(type, external)
    private
 
@@ -57,6 +58,7 @@ module fm_editfns
    public :: insert_char_n, narrow_to_region, widen, validate_region
    public :: buffer_substring, buffer_string, delete_region, &
              delete_and_extract_region
+   public :: pos_bol, pos_eol, line_beginning_position, line_end_position
 
 contains
 
@@ -473,5 +475,68 @@ contains
       if (s == e) return
       call del_range_1(s, e, .true., status, text)
    end subroutine delete_and_extract_region
+
+   ! ------------------------------------------------------------------
+   ! Line positions
+   ! ------------------------------------------------------------------
+
+   !> Start of the current line, after moving `n` - 1 lines (default 1);
+   !> `count` receives the number of lines scanned (n - 1).
+   !> Port of editfns.c:bol.
+   integer(int64) function bol(n, count)
+      integer(int64), intent(in), optional :: n
+      integer(int64), intent(out), optional :: count
+      integer(int64) :: cnt, charpos, bytepos, counted
+
+      cnt = 0
+      if (present(n)) cnt = max(-BUF_BYTES_MAX, min(n - 1, BUF_BYTES_MAX))
+      if (present(count)) count = cnt
+      counted = scan_newline_from_point(cnt, charpos, bytepos)
+      bol = charpos
+   end function bol
+
+   !> Position of the first character on the current line (after moving
+   !> `n` - 1 lines first).  Does not move point.  Port of editfns.c:Fpos_bol.
+   integer(int64) function pos_bol(n)
+      integer(int64), intent(in), optional :: n
+
+      pos_bol = bol(n)
+   end function pos_bol
+
+   !> Like `pos_bol`; upstream also constrains the result to the current
+   !> field, which needs text properties (pending).
+   !> Port of editfns.c:Fline_beginning_position.
+   integer(int64) function line_beginning_position(n)
+      integer(int64), intent(in), optional :: n
+
+      line_beginning_position = bol(n)
+   end function line_beginning_position
+
+   !> Port of editfns.c:eol.
+   integer(int64) function eol(n)
+      integer(int64), intent(in), optional :: n
+      integer(int64) :: cnt
+
+      cnt = 1
+      if (present(n)) cnt = max(-BUF_BYTES_MAX, min(n, BUF_BYTES_MAX))
+      if (cnt <= 0) cnt = cnt - 1
+      eol = find_before_next_newline(buffers(cur)%pt, cnt)
+   end function eol
+
+   !> Position of the last character on the current line (after moving
+   !> `n` - 1 lines first).  Does not move point.  Port of editfns.c:Fpos_eol.
+   integer(int64) function pos_eol(n)
+      integer(int64), intent(in), optional :: n
+
+      pos_eol = eol(n)
+   end function pos_eol
+
+   !> Like `pos_eol`, without the field constraint (pending).
+   !> Port of editfns.c:Fline_end_position.
+   integer(int64) function line_end_position(n)
+      integer(int64), intent(in), optional :: n
+
+      line_end_position = eol(n)
+   end function line_end_position
 
 end module fm_editfns
