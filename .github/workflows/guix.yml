@@ -25,15 +25,18 @@ jobs:
 
       - name: Install Guix
         run: |
-          curl -sSLf -o guix-install.sh \
-            "https://git.savannah.gnu.org/cgit/guix.git/plain/etc/guix-install.sh"
+          # The project's own link to the current installer (the
+          # repository moved from Savannah to Codeberg).
+          curl -sSLf --retry 3 -o guix-install.sh "https://guix.gnu.org/install.sh"
           chmod +x guix-install.sh
           # Accept the defaults, including substitutes from the build farm.
           yes | sudo ./guix-install.sh
           guix --version | sed -n 1p
 
       - name: Update Guix
-        run: guix pull && hash guix && guix describe
+        # Pull from Codeberg, the repository's home since 2025; the
+        # installed (older) Guix still defaults to Savannah.
+        run: guix pull --url=https://codeberg.org/guix/guix.git && hash guix && guix describe
 
       - name: Build and test in a Guix environment
         run: |
