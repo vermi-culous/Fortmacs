@@ -51,7 +51,7 @@ if $style; then
     # Lint: Fortitude's default rules, configured in fpm.toml.  Fixes go
     # first so the formatter tidies what they change.
     if ! command -v fortitude >/dev/null 2>&1; then
-        echo "fortitude not found: pip install fortitude-lint==$FORTITUDE_VERSION" >&2
+        echo "fortitude $FORTITUDE_VERSION not found" >&2
         exit 1
     fi
     if $fix; then
@@ -67,6 +67,25 @@ if $style; then
             echo "format drift: run tools/check.sh --fix" >&2
             exit 1
         fi
+    fi
+
+    # Blank lines (tools/blank-lines.awk): no guide sets them, so we do.
+    blank_drift=""
+    for f in $(find $DIRS -name '*.f90' | sort); do
+        awk -f tools/blank-lines.awk "$f" > "$f.blank"
+        if cmp -s "$f" "$f.blank"; then
+            rm -f "$f.blank"
+        elif $fix; then
+            mv "$f.blank" "$f"
+        else
+            diff -u "$f" "$f.blank" || true
+            rm -f "$f.blank"
+            blank_drift=yes
+        fi
+    done
+    if [ -n "$blank_drift" ]; then
+        echo "blank-line drift: run tools/check.sh --fix" >&2
+        exit 1
     fi
 
     fortitude check $DIRS
