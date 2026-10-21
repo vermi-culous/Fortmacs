@@ -77,7 +77,15 @@ jobs:
           pipx install "fortitude-lint==${FORTITUDE_VERSION}"
 
       - name: Format, lint, build, test, and test under valgrind
+        shell: bash
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           fpm --version | head -1
-          tools/check.sh --valgrind
+          # On failure, repeat the end of the output as an annotation, so it
+          # shows on the PR's checks page without opening the full log.
+          set -o pipefail
+          if ! tools/check.sh --valgrind 2>&1 | tee check.log; then
+            tail -n 60 check.log | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g' \
+              | sed -e 's/^/::error title=tools\/check.sh failed::/'
+            exit 1
+          fi
