@@ -39,9 +39,14 @@ jobs:
         run: guix pull --url=https://codeberg.org/guix/guix.git && hash guix && guix describe
 
       - name: Build and test in a Guix environment
+        # nss-certs gives curl and git (for fpm's dependencies) the CA
+        # bundle that the profile builds.
         run: |
-          guix shell gfortran-toolchain valgrind curl coreutils bash grep sed findutils \
-            ncurses -- bash -euc '
+          guix shell gfortran-toolchain valgrind curl git nss-certs coreutils bash grep sed \
+            findutils ncurses -- bash -euc '
+              export SSL_CERT_DIR="$GUIX_ENVIRONMENT/etc/ssl/certs"
+              export SSL_CERT_FILE="$SSL_CERT_DIR/ca-certificates.crt"
+              export GIT_SSL_CAINFO="$SSL_CERT_FILE"
               gfortran --version | sed -n 1p
               curl -sSLf -o fpm.F90 \
                 "https://github.com/fortran-lang/fpm/releases/download/v${FPM_VERSION}/fpm-${FPM_VERSION}.F90"
