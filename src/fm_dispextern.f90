@@ -43,7 +43,8 @@ module fm_dispextern
                                   FACE_UNDERLINE_DASHES = 5
 
     !> enum face_id: the default face.
-    integer(int32), parameter, public :: DEFAULT_FACE_ID = 0
+    integer(int32), parameter, public :: DEFAULT_FACE_ID = 0, &
+                                         MODE_LINE_ACTIVE_FACE_ID = 1
 
     !> The parts of struct glyph a character cell needs.
     type, public :: glyph_type

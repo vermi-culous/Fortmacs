@@ -22,11 +22,12 @@
 !> One frame per terminal, so a frame holds its terminal directly.  The
 !> current matrix is what the screen shows; redisplay fills the desired
 !> matrix, and update_frame (fm_dispnew) makes the screen match it.
-!> Windows and child frames are not ported yet: the frame's cursor
-!> position is set directly.
+!> The frame has a root window (no splitting yet) and a minibuffer window
+!> on its last line; child frames are not ported.
 module fm_frame
     use fm_termchar, only: tty_display_info
     use fm_dispextern, only: glyph_matrix_type, face_type
+    use fm_window, only: window_type
     implicit none(type, external)
     private
 
@@ -34,10 +35,11 @@ module fm_frame
     type, public :: frame_type
         type(tty_display_info) :: tty
         type(glyph_matrix_type) :: current_matrix, desired_matrix
+        type(window_type) :: root_window, minibuffer_window
         !> The realized faces, indexed by face id (FRAME_FACE_CACHE).
         type(face_type), allocatable :: faces(:)
-        !> Where to leave the cursor after an update (the selected window's
-        !> cursor upstream), 0-based; -1 for none.
+        !> Where to leave the cursor after an update (set by redisplay from
+        !> the selected window's cursor), 0-based; -1 for none.
         integer :: cursor_vpos = -1, cursor_hpos = -1
         !> Hide the cursor after the update (cursor_off_p).
         logical :: cursor_off_p = .false.

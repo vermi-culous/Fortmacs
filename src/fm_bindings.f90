@@ -41,6 +41,7 @@ module fm_bindings
     use fm_keyboard, only: local_function_key_map
     use fm_cmds, only: syms_of_cmds, forward_char, backward_char
     use fm_simple, only: syms_of_simple
+    use fm_files, only: syms_of_files
     implicit none(type, external)
     private
 
@@ -165,6 +166,7 @@ contains
         call bind(global_map, "<right>", "right-char")
         call bind(global_map, "<deletechar>", "delete-forward-char")
         call use_global_map(global_map, status)
+        call syms_of_files(ctl_x_map)
 
         ! bindings.el: function-key-map, the parent of every terminal's
         ! local-function-key-map.

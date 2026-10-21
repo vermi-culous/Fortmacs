@@ -32,7 +32,7 @@ module fm_sysdep
     use, intrinsic :: iso_c_binding, only: c_int, c_long, c_size_t, c_char, &
                                                                               c_signed_char, c_funloc, c_funptr
     use fm_error, only: status_type, set_error, FM_FILE_ERROR
-    use fm_sys_linux, only: c_close, c_grantpt, c_ioctl_winsize, c_open, c_poll, c_posix_openpt, &
+    use fm_sys_linux, only: c_close, c_grantpt, c_ioctl_winsize, c_isatty, c_open, c_poll, c_posix_openpt, &
                             c_ptsname, c_read, c_signal, c_string_to_fortran, c_tcgetattr, &
                             c_tcsetattr, c_unlockpt, c_write, cdisable, cs8, echo, eintr, errno, &
                             icanon, icrnl, iexten, ignbrk, inlcr, isig, istrip, ixany, ixon, &
@@ -55,7 +55,7 @@ module fm_sysdep
               reset_sys_modes, get_tty_size, set_tty_size, emacs_read, &
               emacs_full_write, emacs_write, input_available
     public :: install_window_change_handler, window_change_pending
-    public :: open_pty, close_fd, tabs_safe_p
+    public :: open_pty, close_fd, tabs_safe_p, emacs_isatty
 
     !> Set (to the signal number) asynchronously by the SIGWINCH handler;
     !> read and cleared by `window_change_pending`.
@@ -198,6 +198,13 @@ contains
 
         call emacs_set_tty(fd, old, .false., status)
     end subroutine reset_sys_modes
+
+    !> Whether `fd` is a terminal.  The isatty check of emacs.c:main.
+    logical function emacs_isatty(fd)
+        integer(int32), intent(in) :: fd
+
+        emacs_isatty = c_isatty(int(fd, c_int)) == 1
+    end function emacs_isatty
 
     !> Whether the terminal on `fd` passes tabs through (does not expand
     !> them to spaces).  Port of sysdep.c:tabs_safe_p.

@@ -62,7 +62,7 @@ module fm_keyboard
               discard_input, input_pending_p, read_event
     public :: read_key_sequence, command_loop_step, command_loop, &
               request_exit, set_transient_map
-    public :: READ_KEY_ELTS
+    public :: READ_KEY_ELTS, redisplay_proc
 
     !> keyboard.c:READ_KEY_ELTS, the longest key sequence.
     integer, parameter :: READ_KEY_ELTS = 30
@@ -105,6 +105,18 @@ module fm_keyboard
     !> Vunread_command_events, read before the queue.
     type(value_type), allocatable :: unread(:)
     integer(int64) :: nunread = 0
+
+    abstract interface
+        !> Redisplay all frames (xdisp.c:redisplay).
+        subroutine redisplay_proc()
+            implicit none(type, external)
+        end subroutine redisplay_proc
+    end interface
+
+    !> Called by read_event before it waits for terminal input, so the
+    !> screen is current.  Set by the program (fm_xdisp sits above this
+    !> module); null in tests.
+    procedure(redisplay_proc), pointer, public :: redisplay_hook => null()
 
     !> Set by `request_exit` to end `command_loop`.
     logical :: exit_requested = .false.
@@ -322,6 +334,11 @@ contains
                 return
             end if
             if (input_fd < 0) return
+            ! Nothing typed yet: show the screen before waiting (read_char's
+            ! redisplay).
+            if (associated(redisplay_hook)) then
+                if (.not. input_available(input_fd, 0_int32)) call redisplay_hook()
+            end if
             if (.not. input_available(input_fd, -1_int32)) cycle
             call tty_read_avail_input(nread, status)
             if (.not. status%ok()) return
@@ -682,6 +699,8 @@ contains
             done = .true.
             return
         end if
+        ! A new command clears the echo area.
+        if (allocated(last_message)) last_message = ""
         ! Input ended in the middle of a key sequence: it is unbound.
         if (eof) cmd = nil()
         last_command_event = keys(size(keys))
