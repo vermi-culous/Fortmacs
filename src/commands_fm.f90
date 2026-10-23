@@ -45,6 +45,7 @@ module commands_fm
         type(command_type) :: beginning_of_buffer
         type(command_type) :: beginning_of_line
         type(command_type) :: beginning_of_line_text
+        type(command_type) :: bury_buffer
         type(command_type) :: capitalize_region
         type(command_type) :: capitalize_word
         type(command_type) :: copy_region_as_kill
@@ -155,6 +156,7 @@ module commands_fm
         type(command_type) :: move_to_window_line_top_bottom
         type(command_type) :: negative_argument
         type(command_type) :: newline
+        type(command_type) :: next_buffer
         type(command_type) :: next_history_element
         type(command_type) :: next_line
         type(command_type) :: normal_mode
@@ -163,6 +165,7 @@ module commands_fm
         type(command_type) :: pop_to_mark_command
         type(command_type) :: posix_search_backward
         type(command_type) :: posix_search_forward
+        type(command_type) :: previous_buffer
         type(command_type) :: previous_history_element
         type(command_type) :: previous_line
         type(command_type) :: prog_mode
@@ -226,7 +229,7 @@ module commands_fm
     type(command_table_type), target :: commands
 
     !> The names of the built-in commands.
-    character(len=*), parameter :: BUILTIN_COMMAND_NAMES(188) = [character(len=34) :: &
+    character(len=*), parameter :: BUILTIN_COMMAND_NAMES(191) = [character(len=34) :: &
                                                                  "abort-minibuffers", &
                                                                  "auto-fill-mode", &
                                                                  "back-to-indentation", &
@@ -240,6 +243,7 @@ module commands_fm
                                                                  "beginning-of-buffer", &
                                                                  "beginning-of-line", &
                                                                  "beginning-of-line-text", &
+                                                                 "bury-buffer", &
                                                                  "capitalize-region", &
                                                                  "capitalize-word", &
                                                                  "copy-region-as-kill", &
@@ -350,6 +354,7 @@ module commands_fm
                                                                  "move-to-window-line-top-bottom", &
                                                                  "negative-argument", &
                                                                  "newline", &
+                                                                 "next-buffer", &
                                                                  "next-history-element", &
                                                                  "next-line", &
                                                                  "normal-mode", &
@@ -358,6 +363,7 @@ module commands_fm
                                                                  "pop-to-mark-command", &
                                                                  "posix-search-backward", &
                                                                  "posix-search-forward", &
+                                                                 "previous-buffer", &
                                                                  "previous-history-element", &
                                                                  "previous-line", &
                                                                  "prog-mode", &
@@ -451,6 +457,8 @@ contains
             p => commands%beginning_of_line
         case ("beginning-of-line-text")
             p => commands%beginning_of_line_text
+        case ("bury-buffer")
+            p => commands%bury_buffer
         case ("capitalize-region")
             p => commands%capitalize_region
         case ("capitalize-word")
@@ -671,6 +679,8 @@ contains
             p => commands%negative_argument
         case ("newline")
             p => commands%newline
+        case ("next-buffer")
+            p => commands%next_buffer
         case ("next-history-element")
             p => commands%next_history_element
         case ("next-line")
@@ -687,6 +697,8 @@ contains
             p => commands%posix_search_backward
         case ("posix-search-forward")
             p => commands%posix_search_forward
+        case ("previous-buffer")
+            p => commands%previous_buffer
         case ("previous-history-element")
             p => commands%previous_history_element
         case ("previous-line")

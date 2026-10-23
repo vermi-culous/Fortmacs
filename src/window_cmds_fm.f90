@@ -41,7 +41,7 @@ submodule(window_fm) window_cmds_fm
     use commands_fm, only: commands
     use error_fm, only: format_message, set_error, FM_GENERIC_ERROR, FM_WRONG_TYPE_ARGUMENT
     use buffer_fm, only: cur, current_buffer, set_buffer, buffer_list, get_buffer, get_buffer_create, &
-                         record_buffer, buffer_live_p, kill_buffer, buffer_modified_p, &
+                         record_buffer, frame_seen_buffers, buffer_live_p, kill_buffer, buffer_modified_p, &
                          replace_buffer_in_windows_hook
     use editfns_fm, only: goto_char
     use frame_fm, only: selected_frame, ensure_frame_windows
@@ -52,17 +52,6 @@ submodule(window_fm) window_cmds_fm
     use files_fm, only: save_buffer
     implicit none(type, external)
 
-    !> window-min-height and window-min-width: the size a window must keep
-    !> when split without a SIZE.
-    integer, parameter :: window_min_height = 4, window_min_width = 10
-
-    !> window-safe-min-height and the safe minimum width: the least a
-    !> window may get when split with a SIZE.
-    integer, parameter :: window_safe_min_height = 2, window_safe_min_width = 2
-
-    !> The use time of the most recently selected window (window.c
-    !> window_select_count).
-    integer(int64) :: window_select_count = 0
 
 contains
 
@@ -364,49 +353,52 @@ contains
     module function other_buffer(buffer) result(h)
         type(handle_type), intent(in) :: buffer
         type(handle_type) :: h
-        type(handle_type), allocatable :: all(:)
-        type(status_type) :: status
-        integer :: k, pass
-        all = buffer_list()
-        do pass = 1, 2
-            do k = size(all), 1, -1
-                if (all(k)%index == buffer%index .and. all(k)%generation == buffer%generation) cycle
-                if (len(buffers(all(k)%index)%name) > 0) then
-                    if (buffers(all(k)%index)%name(1:1) == " ") cycle
-                end if
-                if (pass == 1 .and. buffer_visible_p(all(k))) cycle
-                h = all(k)
-                return
-            end do
-        end do
-        call get_buffer_create("*scratch*", h, status)
-    end function other_buffer
-
-    module subroutine replace_buffer_in_windows(buffer)
-        type(handle_type), intent(in) :: buffer
-        type(handle_type), allocatable :: leaves(:)
-        type(handle_type) :: other, prev
+        type(handle_type), allocatable :: seen(:), all(:)
+        type(handle_type) :: notsogood
         type(status_type) :: status
         integer :: k
-        if (.not. window_valid_p(selected_frame%root_window)) return
-        call window_leaves(selected_frame%root_window, leaves)
-        do k = 1, size(leaves)
-            associate (w => windows(leaves(k)%index))
-                if (w%buffer%index /= buffer%index .or. w%buffer%generation /= buffer%generation) cycle
-                prev = w%prev_buffer
-                if (buffer_live_p(prev) .and. .not. (prev%index == buffer%index .and. &
-                                                     prev%generation == buffer%generation)) then
-                    other = prev
-                else
-                    other = other_buffer(buffer)
-                end if
-                call set_window_buffer(w, other, status, record=.false.)
-                ! The selected window shows the current buffer.
-                if (same_window(leaves(k), selected_frame%selected_window) .and. &
-                    .not. selected_frame%minibuffer_selected) call set_buffer(other, status)
-            end associate
+        notsogood = null_handle()
+        ! Consider buffers that have been seen in the frame first.
+        seen = frame_seen_buffers()
+        do k = 1, size(seen)
+            if (.not. candidate_buffer(seen(k), buffer)) cycle
+            if (.not. buffer_visible_p(seen(k))) then
+                h = seen(k)
+                return
+            else if (notsogood%index == 0) then
+                notsogood = seen(k)
+            end if
         end do
-    end subroutine replace_buffer_in_windows
+        ! Consider alist of all buffers next.
+        all = buffer_list()
+        do k = 1, size(all)
+            if (.not. candidate_buffer(all(k), buffer)) cycle
+            if (.not. buffer_visible_p(all(k))) then
+                h = all(k)
+                return
+            else if (notsogood%index == 0) then
+                notsogood = all(k)
+            end if
+        end do
+        if (notsogood%index /= 0) then
+            h = notsogood
+        else
+            call get_buffer_create("*scratch*", h, status)
+        end if
+    end function other_buffer
+
+    !> Whether `b' is live, not `buffer' and not internal (its name does
+    !> not start with a space).  Port of buffer.c:candidate_buffer.
+    logical function candidate_buffer(b, buffer)
+        type(handle_type), intent(in) :: b, buffer
+        candidate_buffer = .false.
+        if (.not. buffer_live_p(b)) return
+        if (b%index == buffer%index .and. b%generation == buffer%generation) return
+        if (len(buffers(b%index)%name) > 0) then
+            if (buffers(b%index)%name(1:1) == " ") return
+        end if
+        candidate_buffer = .true.
+    end function candidate_buffer
 
     module subroutine switch_to_buffer(name, status)
         character(len=*), intent(in) :: name
@@ -518,7 +510,6 @@ contains
     end subroutine cmd_kill_buffer
 
     module subroutine syms_of_window_cmds()
-        replace_buffer_in_windows_hook => replace_buffer_in_windows
         commands%split_window_below%run => cmd_split_window_below
         commands%split_window_right%run => cmd_split_window_right
         commands%delete_window%run => cmd_delete_window

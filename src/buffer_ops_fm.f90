@@ -48,6 +48,7 @@ contains
         if (was_current) call set_buffer_internal(0_int64)
         buffers(i)%last_name = buffers(i)%name
         call alist_remove(h)
+        call frames_discard_buffer(h)
         ! Unchain all markers of this buffer and leave them pointing nowhere.
         call unchain_all_markers(i)
         call clear_charpos_cache(i)

@@ -707,6 +707,20 @@ contains
         end do
     end subroutine execute_kbd_macro
 
+    !> Make the selected window's buffer current (set_buffer_internal
+    !> (XBUFFER (XWINDOW (selected_window)->contents)) in
+    !> keyboard.c:command_loop_1).
+    subroutine select_window_buffer()
+        use frame_fm, only: selected_window
+        use window_fm, only: windows, window_live_p
+        use buffer_fm, only: set_buffer, buffer_live_p
+        type(handle_type) :: sw
+        type(status_type) :: st
+        sw = selected_window()
+        if (.not. window_live_p(sw)) return
+        if (buffer_live_p(windows(sw%index)%buffer)) call set_buffer(windows(sw%index)%buffer, st)
+    end subroutine select_window_buffer
+
     !> Read one key sequence and run its command.  `done' at end of input.
     !> Errors from the command are reported in `last_message' (as the
     !> command loop's error handler displays them) and returned in
@@ -719,6 +733,8 @@ contains
         type(value_type) :: cmd
         logical :: eof, handled
         done = .false.
+        ! Make sure the current window's buffer is selected.
+        call select_window_buffer()
         this_command = nil()
         real_this_command = nil()
         call read_key_sequence(keys, cmd, eof, status)

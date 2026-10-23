@@ -149,6 +149,12 @@ module buffer_fm
         !> Unique per buffer ever created, so caches keyed by slot (which is
         !> reused after kill-buffer) can tell buffers apart.
         integer(int64) :: serial = 0
+        !> The start position of the last window to stop showing the
+        !> buffer (buffer.h last_window_start).
+        integer(int64) :: last_window_start = 1
+        !> BVAR last_selected_window: the window that last showed the
+        !> buffer while selected, or the null handle.
+        type(handle_type) :: last_selected_window
         !> BVAR local_var_alist: the variables local to this buffer (symbol
         !> ids) and, while the buffer is not current, their values (data_fm
         !> swaps them in and out).
@@ -229,9 +235,15 @@ module buffer_fm
 
     type(slot_table_type) :: table
     !> Live buffers, least recently selected first (upstream Vbuffer_alist,
-    !> most recent first): made or `record_buffer'ed ones go last.
+    !> most recent first): `record_buffer'ed ones go last, new and buried
+    !> ones first.
     type(handle_type), allocatable :: alist(:)
     integer(int64) :: alist_count = 0
+
+    !> The selected frame's buffer lists (frame.h buffer_list and
+    !> buried_buffer_list), most recent first: the buffers selected in
+    !> the frame, and those buried there.  Fortmacs has one frame.
+    type(handle_type), allocatable :: frame_buffers(:), frame_buried(:)
     integer(int64) :: last_serial = 0
 
     abstract interface
@@ -269,7 +281,8 @@ module buffer_fm
     public :: resolve_buffer, buffer_live_p, current_buffer, buffer_handle, auto_fill_proc, swap_locals_proc, &
               set_buffer_internal
     public :: get_buffer, get_buffer_create, generate_new_buffer_name, get_file_buffer
-    public :: buffer_name, buffer_last_name, rename_buffer, buffer_list, record_buffer
+    public :: buffer_name, buffer_last_name, rename_buffer, buffer_list, record_buffer, frame_buffer_list, &
+              frame_seen_buffers, bury_buffer_internal, frames_discard_buffer
     public :: set_buffer, kill_buffer, erase_buffer
     public :: buffer_modified_p, restore_buffer_modified_p, &
               buffer_modified_tick, buffer_chars_modified_tick
@@ -387,7 +400,11 @@ contains
             if (allocated(buffers(cur)%directory)) buffers(i)%directory = buffers(cur)%directory
         end if
         if (present(inhibit_buffer_hooks)) buffers(i)%inhibit_buffer_hooks = inhibit_buffer_hooks
+        ! Put this in the alist of all live buffers (at its end, the least
+        ! recently selected one).
         call alist_append(h)
+        alist(2:alist_count) = alist(1:alist_count - 1)
+        alist(1) = h
         if (cur == 0) call set_buffer_internal(i)
     end subroutine get_buffer_create
 
@@ -523,16 +540,129 @@ contains
         buffers(cur)%name = actual
     end subroutine rename_buffer
 
-    !> Live buffers, least recently selected (or made) first.  Port of
-    !> buffer.c:Fbuffer_list in reverse (and without frame-local ordering).
+    !> Return a list of all live buffers, most recently selected first.
+    !> Port of buffer.c:Fbuffer_list (FRAME nil).
     function buffer_list() result(list)
         type(handle_type), allocatable :: list(:)
         if (alist_count == 0) then
             allocate (list(0))
         else
-            list = alist(1:alist_count)
+            list = alist(alist_count:1:-1)
         end if
     end function buffer_list
+
+    !> Return the buffer list in the proper order for the selected frame:
+    !> the buffers shown in the frame come first, followed by the rest of
+    !> the buffers, the ones buried there last.  Port of
+    !> buffer.c:Fbuffer_list (FRAME a frame).
+    function frame_buffer_list() result(list)
+        type(handle_type), allocatable :: list(:)
+        type(handle_type), allocatable :: general(:)
+        integer :: n, k
+        general = buffer_list()
+        allocate (list(size(general)))
+        n = 0
+        if (allocated(frame_buffers)) then
+            do k = 1, size(frame_buffers)
+                n = n + 1
+                list(n) = frame_buffers(k)
+            end do
+        end if
+        do k = 1, size(general)
+            if (in_list(frame_buffers, general(k))) cycle
+            if (in_list(frame_buried, general(k))) cycle
+            n = n + 1
+            list(n) = general(k)
+        end do
+        if (allocated(frame_buried)) then
+            do k = size(frame_buried), 1, -1
+                n = n + 1
+                list(n) = frame_buried(k)
+            end do
+        end if
+    end function frame_buffer_list
+
+    !> The buffers selected in the frame, most recent first (frame.h
+    !> buffer_list).
+    function frame_seen_buffers() result(list)
+        type(handle_type), allocatable :: list(:)
+        if (allocated(frame_buffers)) then
+            list = frame_buffers
+        else
+            allocate (list(0))
+        end if
+    end function frame_seen_buffers
+
+    !> Whether `h' is in `list'.
+    logical function in_list(list, h)
+        type(handle_type), allocatable, intent(in) :: list(:)
+        type(handle_type), intent(in) :: h
+        integer :: k
+        in_list = .false.
+        if (.not. allocated(list)) return
+        do k = 1, size(list)
+            if (list(k)%index == h%index .and. list(k)%generation == h%generation) then
+                in_list = .true.
+                return
+            end if
+        end do
+    end function in_list
+
+    !> `list' without `h'.
+    subroutine list_delq(list, h)
+        type(handle_type), allocatable, intent(inout) :: list(:)
+        type(handle_type), intent(in) :: h
+        type(handle_type), allocatable :: kept(:)
+        integer :: k, n
+        if (.not. allocated(list)) allocate (list(0))
+        n = size(list)
+        do k = 1, n
+            if (list(k)%index == h%index .and. list(k)%generation == h%generation) then
+                allocate (kept(n - 1))
+                kept(1:k - 1) = list(1:k - 1)
+                kept(k:n - 1) = list(k + 1:n)
+                call move_alloc(kept, list)
+                return
+            end if
+        end do
+    end subroutine list_delq
+
+    !> (cons h (delq h list))
+    subroutine list_push(list, h)
+        type(handle_type), allocatable, intent(inout) :: list(:)
+        type(handle_type), intent(in) :: h
+        type(handle_type), allocatable :: grown(:)
+        call list_delq(list, h)
+        allocate (grown(size(list) + 1))
+        grown(1) = h
+        grown(2:) = list
+        call move_alloc(grown, list)
+    end subroutine list_push
+
+    !> Move BUFFER to the end of the buffer list.  Port of
+    !> buffer.c:Fbury_buffer_internal.
+    subroutine bury_buffer_internal(h)
+        type(handle_type), intent(in) :: h
+        integer(int64) :: k
+        do k = 1, alist_count
+            if (alist(k)%index == h%index .and. alist(k)%generation == h%generation) then
+                alist(2:k) = alist(1:k - 1)
+                alist(1) = h
+                exit
+            end if
+        end do
+        ! Update buffer lists of selected frame.
+        call list_delq(frame_buffers, h)
+        call list_push(frame_buried, h)
+    end subroutine bury_buffer_internal
+
+    !> Drop the killed buffer `h' from the frame's buffer lists.  Port of
+    !> frame.c:frames_discard_buffer.
+    subroutine frames_discard_buffer(h)
+        type(handle_type), intent(in) :: h
+        call list_delq(frame_buffers, h)
+        call list_delq(frame_buried, h)
+    end subroutine frames_discard_buffer
 
     !> Make `h' the current buffer.  Port of buffer.c:Fset_buffer.
     subroutine set_buffer(h, status)
@@ -568,9 +698,12 @@ contains
                     alist(j) = alist(j + 1)
                 end do
                 alist(alist_count) = h
-                return
+                exit
             end if
         end do
+        ! Update buffer list of selected frame.
+        call list_push(frame_buffers, h)
+        call list_delq(frame_buried, h)
     end subroutine record_buffer
 
     subroutine alist_append(h)

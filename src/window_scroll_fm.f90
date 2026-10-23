@@ -429,41 +429,6 @@ contains
         call move_to_window_line_top_bottom(current_prefix_arg, status)
     end subroutine cmd_move_to_window_line_top_bottom
 
-    module subroutine quit_window(status)
-        type(status_type), intent(out) :: status
-        type(window_type), pointer :: w
-        type(handle_type), allocatable :: all(:)
-        type(handle_type) :: other
-        integer :: k
-        integer(int64) :: bi
-        status = status_type()
-        w => selected_window()
-        other = w%prev_buffer
-        if (buffer_live_p(other)) then
-            call resolve_buffer(other, bi, status)
-            if (status%ok() .and. bi /= cur) then
-                call set_buffer(other, status)
-                return
-            end if
-        end if
-        ! switch-to-prev-buffer without history: the newest other buffer
-        ! that is not internal (its name starts with a space).
-        all = buffer_list()
-        do k = size(all), 1, -1
-            call resolve_buffer(all(k), bi, status)
-            if (.not. status%ok() .or. bi == cur) cycle
-            if (buffers(bi)%name(1:min(1, len(buffers(bi)%name))) == " ") cycle
-            call set_buffer(all(k), status)
-            return
-        end do
-        status = status_type()
-    end subroutine quit_window
-
-    subroutine cmd_quit_window(status)
-        type(status_type), intent(out) :: status
-        call quit_window(status)
-    end subroutine cmd_quit_window
-
     module subroutine syms_of_window()
         commands%scroll_up%run => cmd_scroll_up
         commands%scroll_down%run => cmd_scroll_down
@@ -473,7 +438,7 @@ contains
         commands%recenter_top_bottom%run => cmd_recenter_top_bottom
         commands%move_to_window_line%run => cmd_move_to_window_line
         commands%move_to_window_line_top_bottom%run => cmd_move_to_window_line_top_bottom
-        commands%quit_window%run => cmd_quit_window
         call syms_of_window_cmds()
+        call syms_of_window_display()
     end subroutine syms_of_window
 end submodule window_scroll_fm

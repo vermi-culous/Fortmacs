@@ -46,7 +46,7 @@ module minibuffer_fm
     use character_fm, only: string_char_and_length
     use editfns_fm, only: point, point_max, goto_char, buffer_substring
     use frame_fm, only: selected_frame, frame_selected_window_ref
-    use window_fm, only: window_type, set_window_buffer, set_window_start
+    use window_fm, only: window_type, set_window_buffer_internal, set_window_start
     use xdisp_fm, only: message
     use dispnew_fm, only: ding
     use fns_fm, only: compare_strings, COMPARE_EQUAL, schars, substring, string_lessp
@@ -1070,7 +1070,7 @@ contains
         sw => frame_selected_window_ref()
         if (.not. completions_visible()) then
             completions_previous_buffer = sw%buffer
-            call set_window_buffer(sw, buf, status, record=.false.)
+            call set_window_buffer_internal(selected_frame%selected_window, buf, .false.)
         else
             call set_window_start(sw, 1_int64, status, noforce=.true.)
         end if
@@ -1166,7 +1166,8 @@ contains
         if (previous%index == 0) previous = minibuffer_calling_buffer
         if (previous%index == 0) return
         sw => frame_selected_window_ref()
-        call set_window_buffer(sw, previous, status, record=.false.)
+        call set_window_buffer_internal(selected_frame%selected_window, previous, .false.)
+        status = status_type()
     end subroutine minibuffer_hide_completions
 
     ! ------------------------------------------------------------------
@@ -1198,7 +1199,7 @@ contains
         allocate (names(size(all)))
         n = 0
         ! Most recently selected first.
-        do k = size(all), 1, -1
+        do k = 1, size(all)
             if (present(except)) then
                 if (all(k)%index == except%index .and. all(k)%generation == except%generation) cycle
             end if

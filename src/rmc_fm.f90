@@ -213,8 +213,7 @@ contains
                 call split_window(selected_window(), 0, .false., .false., help_window, st)
                 if (.not. st%ok()) return
             end if
-            w => window_ref(help_window)
-            call set_window_buffer(w, buf, st, record=.false.)
+            call set_window_buffer(help_window, buf, st)
         end subroutine show
     end subroutine read_multiple_choice
     ! (/ (window-width) 25): the columns of the generated help.

@@ -699,17 +699,6 @@ contains
         if (windows(f%root_window%index)%total_lines == 0) call init_frame_windows(f)
         if (.not. allocated(f%faces)) call realize_basic_faces(f)
         if (size(f%faces) < REGION_FACE_ID + 1) call realize_basic_faces(f)
-        ! The selected window shows the current buffer (unless the
-        ! minibuffer window is selected).
-        cb = current_buffer()
-        if (.not. f%minibuffer_selected) then
-            associate (sw => windows(f%selected_window%index))
-                if (cb%index /= sw%buffer%index .or. cb%generation /= sw%buffer%generation) then
-                    call set_window_buffer(sw, cb, status)
-                    if (.not. status%ok()) return
-                end if
-            end associate
-        end if
         do r = 0, windows(f%minibuffer_window%index)%top_line - 1
             call blank_row(f, r)
         end do

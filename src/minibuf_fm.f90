@@ -50,7 +50,7 @@ module minibuf_fm
     use keyboard_fm, only: recursive_edit_1, throw_exit, command_loop_level, post_command_hook, &
                            redisplay_proc, last_message
     use frame_fm, only: selected_frame, frame_selected_window_ref, minibuffer_window_ref
-    use window_fm, only: window_type, set_window_buffer, window_start, set_window_start
+    use window_fm, only: window_type, set_window_buffer, set_window_buffer_internal, window_start, set_window_start
     use subr_fm, only: add_to_history
     implicit none(type, external)
     private
@@ -307,7 +307,7 @@ contains
         end if
         ! The minibuffer works in the caller's directory.
         if (have_dir) buffers(cur)%directory = ambient_dir
-        call set_window_buffer(mw, minibuffer, st)
+        call set_window_buffer(selected_frame%minibuffer_window, minibuffer, st)
         selected_frame%minibuffer_selected = .true.
         mw%hscroll = 0
         ! The prompt: read-only text in its own field.
@@ -355,7 +355,7 @@ contains
                                               sw%buffer%generation /= old_root_buffer%generation)) then
             call resolve_buffer(old_root_buffer, bi, st)
             if (st%ok()) then
-                call set_window_buffer(sw, old_root_buffer, st, record=.false.)
+                call set_window_buffer_internal(selected_frame%selected_window, old_root_buffer, .false.)
                 call set_window_start(sw, old_root_start, st, noforce=.true.)
             end if
         end if
