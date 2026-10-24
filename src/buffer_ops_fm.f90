@@ -24,14 +24,16 @@
 submodule(buffer_fm) buffer_ops_fm
     use marker_fm, only: unchain_all_markers, clear_charpos_cache, free_marker
     use insdel_fm, only: del_range
+    use itree_fm, only: delete_all_overlays
     implicit none(type, external)
 
 contains
 
     !> If it was current, the most recent other live, non-hidden buffer
     !> becomes current, creating *scratch* if there is none (as
-    !> buffer.c:other_buffer_safely).  Its processes get SIGHUP.  Hooks,
-    !> overlays and indirect buffers are not handled yet.
+    !> buffer.c:other_buffer_safely).  Its processes get SIGHUP and its
+    !> overlays are deleted.  Hooks and indirect buffers are not handled
+    !> yet.
     module subroutine kill_buffer(h, status)
         type(handle_type), intent(in) :: h
         type(status_type), intent(out) :: status
@@ -51,6 +53,7 @@ contains
         buffers(i)%last_name = buffers(i)%name
         call alist_remove(h)
         call frames_discard_buffer(h)
+        call delete_all_overlays(h)
         ! Unchain all markers of this buffer and leave them pointing nowhere.
         call unchain_all_markers(i)
         call clear_charpos_cache(i)

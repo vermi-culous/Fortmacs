@@ -26,7 +26,8 @@
 submodule(simple_fm) simple_fill_fm
     use commands_fm, only: commands
     use buffer_fm, only: fill_column, auto_fill_function
-    use cmds_fm, only: internal_auto_fill_hook, end_of_line
+    use cmds_fm, only: internal_auto_fill_hook, end_of_line, post_self_insert_hook
+    use eval_fm, only: hook_type
     use indent_fm, only: current_column, move_to_column, indent_to_left_margin, indent_according_to_mode
     use editfns_fm, only: point_marker
     use subr_fm, only: read_number
@@ -40,6 +41,11 @@ submodule(simple_fm) simple_fill_fm
     use insdel_fm, only: insert_before_markers
     use modes_fm, only: minor_modes
     implicit none(type, external)
+
+    ! The state newline_postproc works from: where point was before the
+    ! newline, and whether it was at the start of a page.
+    integer(int64) :: newline_beforepos = 0
+    logical :: newline_was_page_start = .false.
 
 contains
 
@@ -207,10 +213,11 @@ contains
     end procedure default_indent_new_line
 
     module procedure newline
-    logical :: was_page_start, saved_inhibit, blank
-    integer(int64) :: beforepos, n, pos
-    type(handle_type) :: m
+    logical :: saved_inhibit, is_interactive
+    integer(int64) :: n
     type(status_type) :: st
+    type(value_type) :: saved_event
+    type(hook_type) :: saved_hook
     call barf_if_buffer_read_only(status)
     if (.not. status%ok()) return
     if (present(arg)) then
@@ -219,36 +226,68 @@ contains
             return
         end if
     end if
+    is_interactive = .false.
+    if (present(interactive)) is_interactive = interactive
     ! Call self-insert so that auto-fill, abbrev expansion etc. happen.
+    ! Set last-command-event to tell self-insert what to insert.
     call init_paragraph_variables()
-    was_page_start = .false.
-    if (bolp()) was_page_start = looking_at(page_delimiter, st)
-    beforepos = point()
+    newline_was_page_start = .false.
+    if (bolp()) newline_was_page_start = looking_at(page_delimiter, st)
+    newline_beforepos = point()
+    saved_event = last_command_event
+    last_command_event = make_fixnum(10_int64)
     ! Don't auto-fill if we have a prefix argument.
     saved_inhibit = inhibit_auto_fill
     if (present(arg)) inhibit_auto_fill = .true.
     n = 1
     if (present(arg)) n = arg
-    call self_insert_command(n, 10_int64, status)
+    if (.not. is_interactive) then
+        ! For non-interactive uses, the rest is the only function of
+        ! post-self-insert-hook (it runs last, after auto-fill).
+        saved_hook = post_self_insert_hook
+        call post_self_insert_hook%clear()
+        call self_insert_command(n, 10_int64, status)
+        post_self_insert_hook = saved_hook
+        if (status%ok()) call newline_postproc(status)
+    else
+        ! Do the rest in post-self-insert-hook, because we want to do it
+        ! *before* other functions on that hook.
+        call post_self_insert_hook%add(newline_postproc, local=.true.)
+        call self_insert_command(n, 10_int64, status)
+        call post_self_insert_hook%remove(newline_postproc, local=.true.)
+    end if
     inhibit_auto_fill = saved_inhibit
-    if (.not. status%ok()) return
-    ! The rest runs in post-self-insert-hook upstream.  If the newline
-    ! leaves the previous line blank, and we have a left margin, delete
-    ! that from the blank line.
-    call point_marker(m)
-    call goto_char(beforepos)
-    call beginning_of_line()
-    blank = looking_at("[ "//TAB//"]+$", st)
-    if (blank) blank = current_left_margin() > 0
-    if (blank) call delete_region(point(), line_end_position(), status)
-    call marker_position(m, pos, st)
-    call goto_char(pos)
-    call free_marker(m, st)
-    if (.not. status%ok()) return
-    ! Indent the line after the newline, except in one case: when we
-    ! added the newline at the beginning of a line that starts a page.
-    if (.not. was_page_start) call move_to_left_margin(status, force=.true.)
+    last_command_event = saved_event
     end procedure newline
+
+    !> The rest of `newline', run first in `post_self_insert_hook':
+    !> delete the left margin from a line the newline left blank, and
+    !> indent the new line.  The newline-postproc of simple.el:newline
+    !> (`use_hard_newlines' is not ported).
+    recursive subroutine newline_postproc(status)
+        type(status_type), intent(out) :: status
+        logical :: blank
+        integer(int64) :: pos
+        type(handle_type) :: m
+        type(status_type) :: st
+        status = status_type()
+        call post_self_insert_hook%remove(newline_postproc, local=.true.)
+        ! If the newline leaves the previous line blank, and we have a left
+        ! margin, delete that from the blank line.
+        call point_marker(m)
+        call goto_char(newline_beforepos)
+        call beginning_of_line()
+        blank = looking_at("[ "//TAB//"]+$", st)
+        if (blank) blank = current_left_margin() > 0
+        if (blank) call delete_region(point(), line_end_position(), status)
+        call marker_position(m, pos, st)
+        call goto_char(pos)
+        call free_marker(m, st)
+        if (.not. status%ok()) return
+        ! Indent the line after the newline, except in one case: when we
+        ! added the newline at the beginning of a line that starts a page.
+        if (.not. newline_was_page_start) call move_to_left_margin(status, force=.true.)
+    end subroutine newline_postproc
 
     module procedure open_line
     logical :: do_fill_prefix, do_left_margin

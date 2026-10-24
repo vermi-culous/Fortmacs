@@ -84,6 +84,12 @@ program tester
     use test_rect_fm, only: collect_rect_fm
     use test_register_fm, only: collect_register_fm
     use test_kmacro_fm, only: collect_kmacro_fm
+    use test_timer_fm, only: collect_timer_fm
+    use test_itree_fm, only: collect_itree_fm
+    use test_paren_fm, only: collect_paren_fm
+    use test_electric_fm, only: collect_electric_fm
+    use test_elec_pair_fm, only: collect_elec_pair_fm
+    use test_simple_electric_fm, only: collect_simple_electric_fm
     implicit none(type, external)
     ! test-drive's interfaces take default integers.
     integer :: stat, is
@@ -151,7 +157,13 @@ program tester
                  new_testsuite("font_lock_fm", collect_font_lock_fm), &
                  new_testsuite("rect_fm", collect_rect_fm), &
                  new_testsuite("register_fm", collect_register_fm), &
-                 new_testsuite("kmacro_fm", collect_kmacro_fm) &
+                 new_testsuite("kmacro_fm", collect_kmacro_fm), &
+                 new_testsuite("timer_fm", collect_timer_fm), &
+                 new_testsuite("itree_fm", collect_itree_fm), &
+                 new_testsuite("paren_fm", collect_paren_fm), &
+                 new_testsuite("electric_fm", collect_electric_fm), &
+                 new_testsuite("elec_pair_fm", collect_elec_pair_fm), &
+                 new_testsuite("simple_electric_fm", collect_simple_electric_fm) &
                  ]
     call get_argument(1, suite_name)
     call get_argument(2, test_name)

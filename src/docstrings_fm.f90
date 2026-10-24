@@ -31,7 +31,7 @@ module docstrings_fm
     use callint_fm, only: command_name_of, current_prefix_arg, mark_even_if_inactive
     use callproc_fm, only: shell_file_name
     use casefiddle_fm, only: case_symbols_as_words
-    use cmds_fm, only: auto_fill_chars
+    use cmds_fm, only: auto_fill_chars, post_self_insert_hook
     use commands_fm, only: commands
     use compile_fm, only: comint_inhibit_carriage_motion, compilation_always_kill, &
                           compilation_ask_about_save, compilation_directory, compilation_disable_input, &
@@ -59,6 +59,14 @@ module docstrings_fm
                              DIRED_USE_LS_DIRED_UNSPECIFIED, dired_warning, dired_warning_face
     use editfns_fm, only: inhibit_field_text_motion
     use edmacro_fm, only: edmacro_eight_bits
+    use elec_pair_fm, only: electric_pair_local_mode_hook, electric_pair_mode_hook, &
+                            electric_pair_open_newline_between_pairs, electric_pair_pairs, &
+                            electric_pair_preserve_balance, electric_pair_skip_whitespace, &
+                            ELECTRIC_PAIR_SKIP_WHITESPACE_NIL, ELECTRIC_PAIR_SKIP_WHITESPACE_T, &
+                            ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP, electric_pair_skip_whitespace_chars, &
+                            electric_pair_text_pairs, electric_pair_text_syntax_table
+    use electric_fm, only: electric_indent_chars, electric_indent_functions_without_reindent, &
+                           electric_indent_inhibit, electric_indent_local_mode_hook, electric_indent_mode_hook
     use eval_fm, only: change_major_mode_hook
     use files_fm, only: change_major_mode_with_file_name, directory_listing_before_filename_regexp, &
                         dired_ls_error_buffer, dired_ls_error_file, find_file_run_dired, insert_directory_program, &
@@ -109,6 +117,13 @@ module docstrings_fm
     use paragraphs_fm, only: page_delimiter, paragraph_ignore_fill_prefix, paragraph_separate, &
                              paragraph_start, sentence_end, sentence_end_base, sentence_end_double_space, &
                              sentence_end_without_period, sentence_end_without_space
+    use paren_fm, only: show_paren_context_when_offscreen, show_paren_delay, &
+                        show_paren_highlight_openparen, show_paren_local_mode_hook, show_paren_mode_hook, &
+                        show_paren_not_in_comments_or_strings, SHOW_PAREN_COMMENTS_STRINGS_ALWAYS, &
+                        SHOW_PAREN_COMMENTS_STRINGS_ALL, SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH, &
+                        show_paren_priority, show_paren_ring_bell_on_mismatch, show_paren_style, &
+                        SHOW_PAREN_PARENTHESIS, SHOW_PAREN_EXPRESSION, SHOW_PAREN_MIXED, &
+                        show_paren_when_point_in_periphery, show_paren_when_point_inside_paren
     use process_fm, only: delete_exited_processes, process_connection_type
     use prog_mode_fm, only: prog_mode_hook, prog_mode_map
     use rect_fm, only: killed_rectangle
@@ -119,15 +134,20 @@ module docstrings_fm
                           replace_lax_whitespace, replace_regexp_lax_whitespace
     use rmc_fm, only: read_char_choice_use_read_key
     use search_fm, only: case_fold_search, search_spaces_regexp
-    use simple_fm, only: auto_fill_inhibit_regexp, auto_fill_mode_hook, copy_region_blink_delay, &
-                         cycle_spacing_actions, delete_active_region, fill_prefix, goal_column, indent_tabs_mode_hook, &
-                         inhibit_auto_fill, kill_read_only_ok, kill_ring_max, kill_ring_yank_pointer, &
-                         kill_whole_line_option, line_move_visual, mark_ring_max, minibuffer_local_shell_command_map, &
-                         pending_undo_list, read_quoted_char_radix, shell_command_default_error_buffer, &
-                         shell_command_dont_erase_buffer, DONT_ERASE_NIL, DONT_ERASE_ERASE, DONT_ERASE_BEG_LAST_OUT, &
-                         DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT, shell_command_prompt_show_cwd, &
-                         shell_command_switch, special_mode_hook, special_mode_map, suggest_key_bindings, &
-                         transient_mark_mode_hook, undo_in_progress, undo_no_redo
+    use simple_fm, only: auto_fill_inhibit_regexp, auto_fill_mode_hook, &
+                         backward_delete_char_untabify_method, UNTABIFY_METHOD_NIL, UNTABIFY_METHOD_UNTABIFY, &
+                         UNTABIFY_METHOD_HUNGRY, UNTABIFY_METHOD_ALL, blink_matching_delay, blink_matching_paren, &
+                         BLINK_MATCHING_PAREN_NIL, BLINK_MATCHING_PAREN_T, BLINK_MATCHING_PAREN_JUMP, &
+                         BLINK_MATCHING_PAREN_JUMP_OFFSCREEN, blink_matching_paren_distance, &
+                         blink_matching_paren_dont_ignore_comments, blink_matching_paren_on_screen, &
+                         copy_region_blink_delay, cycle_spacing_actions, delete_active_region, fill_prefix, &
+                         goal_column, indent_tabs_mode_hook, inhibit_auto_fill, kill_read_only_ok, kill_ring_max, &
+                         kill_ring_yank_pointer, kill_whole_line_option, line_move_visual, mark_ring_max, &
+                         minibuffer_local_shell_command_map, pending_undo_list, read_quoted_char_radix, &
+                         shell_command_default_error_buffer, shell_command_dont_erase_buffer, DONT_ERASE_NIL, &
+                         DONT_ERASE_ERASE, DONT_ERASE_BEG_LAST_OUT, DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT, &
+                         shell_command_prompt_show_cwd, shell_command_switch, special_mode_hook, special_mode_map, &
+                         suggest_key_bindings, transient_mark_mode_hook, undo_in_progress, undo_no_redo
     use subr_fm, only: after_change_major_mode_hook, change_major_mode_after_body_hook, &
                        history_delete_duplicates, history_length, y_or_n_p_history_variable, y_or_n_p_use_read_key
     use syntax_fm, only: comment_end_can_be_escaped, comment_use_syntax_ppss, &
@@ -135,6 +155,7 @@ module docstrings_fm
                          parse_sexp_ignore_comments, words_include_escapes
     use term_fm, only: visible_bell
     use text_mode_fm, only: text_mode_hook, text_mode_map, text_mode_syntax_table, text_mode_variant
+    use timer_fm, only: timer_max_repeats
     use undo_fm, only: amalgamating_undo_limit, this_command_amalgamating
     use window_fm, only: display_buffer_mark_dedicated, DEDICATED_NONE, DEDICATED_WEAK, &
                          DEDICATED_STRONG, even_window_sizes, minibuffer_scroll_window, next_screen_context_lines, &
@@ -164,753 +185,248 @@ module docstrings_fm
     end type doc_entry_type
 
     !> The documented functions, sorted.
-    character(len=38), parameter, public :: function_names(492) = [character(len=38) :: &
-                                                                   "abort_minibuffers", &
-                                                                   "abort_recursive_edit", &
-                                                                   "accept_process_output", &
-                                                                   "add_auto_mode", &
-                                                                   "append_to_register", &
-                                                                   "apply_on_rectangle", &
-                                                                   "auto_fill_mode", &
-                                                                   "back_to_indentation", &
-                                                                   "backward_char", &
-                                                                   "backward_kill_paragraph", &
-                                                                   "backward_kill_sentence", &
-                                                                   "backward_kill_sexp", &
-                                                                   "backward_kill_word", &
-                                                                   "backward_list", &
-                                                                   "backward_paragraph", &
-                                                                   "backward_sentence", &
-                                                                   "backward_sexp", &
-                                                                   "backward_up_list", &
-                                                                   "backward_word", &
-                                                                   "beginning_of_buffer", &
-                                                                   "beginning_of_line", &
-                                                                   "beginning_of_line_text", &
-                                                                   "bobp", &
-                                                                   "bolp", &
-                                                                   "buffer_name", &
-                                                                   "buffer_substring", &
-                                                                   "buffer_to_register", &
-                                                                   "bury_buffer", &
-                                                                   "call_last_kbd_macro", &
-                                                                   "canonically_space_region", &
-                                                                   "capitalize", &
-                                                                   "capitalize_region", &
-                                                                   "capitalize_word", &
-                                                                   "char_syntax", &
-                                                                   "clear_rectangle", &
-                                                                   "compilation_mode", &
-                                                                   "compilation_start", &
-                                                                   "compile", &
-                                                                   "copy_rectangle_as_kill", &
-                                                                   "copy_rectangle_to_register", &
-                                                                   "copy_region_as_kill", &
-                                                                   "copy_syntax_table", &
-                                                                   "copy_to_register", &
-                                                                   "count_lines", &
-                                                                   "current_buffer", &
-                                                                   "current_fill_column", &
-                                                                   "current_global_map", &
-                                                                   "current_indentation", &
-                                                                   "current_justification", &
-                                                                   "current_kill", &
-                                                                   "cycle_spacing", &
-                                                                   "deactivate_mark", &
-                                                                   "default_indent_new_line", &
-                                                                   "delete_all_space", &
-                                                                   "delete_backward_char", &
-                                                                   "delete_blank_lines", &
-                                                                   "delete_char", &
-                                                                   "delete_extract_rectangle", &
-                                                                   "delete_forward_char", &
-                                                                   "delete_horizontal_space", &
-                                                                   "delete_indentation", &
-                                                                   "delete_other_windows", &
-                                                                   "delete_process", &
-                                                                   "delete_rectangle", &
-                                                                   "delete_region", &
-                                                                   "delete_whitespace_rectangle", &
-                                                                   "delete_window", &
-                                                                   "derived_mode_p", &
-                                                                   "describe_function", &
-                                                                   "describe_key", &
-                                                                   "describe_key_briefly", &
-                                                                   "describe_variable", &
-                                                                   "digit_argument", &
-                                                                   "dired", &
-                                                                   "dired_build_subdir_alist", &
-                                                                   "dired_change_marks", &
-                                                                   "dired_copy_filename_as_kill", &
-                                                                   "dired_create_directory", &
-                                                                   "dired_display_file", &
-                                                                   "dired_do_delete", &
-                                                                   "dired_do_flagged_delete", &
-                                                                   "dired_do_redisplay", &
-                                                                   "dired_find_file", &
-                                                                   "dired_find_file_other_window", &
-                                                                   "dired_flag_auto_save_files", &
-                                                                   "dired_flag_backup_files", &
-                                                                   "dired_flag_file_deletion", &
-                                                                   "dired_flag_files_regexp", &
-                                                                   "dired_flag_garbage_files", &
-                                                                   "dired_goto_file", &
-                                                                   "dired_kill_subdir", &
-                                                                   "dired_mark", &
-                                                                   "dired_mark_directories", &
-                                                                   "dired_mark_executables", &
-                                                                   "dired_mark_files_containing_regexp", &
-                                                                   "dired_mark_files_regexp", &
-                                                                   "dired_mark_subdir_files", &
-                                                                   "dired_mark_symlinks", &
-                                                                   "dired_mode", &
-                                                                   "dired_next_dirline", &
-                                                                   "dired_next_line", &
-                                                                   "dired_next_marked_file", &
-                                                                   "dired_next_subdir", &
-                                                                   "dired_noselect", &
-                                                                   "dired_number_of_marked_files", &
-                                                                   "dired_other_window", &
-                                                                   "dired_prev_dirline", &
-                                                                   "dired_prev_marked_file", &
-                                                                   "dired_prev_subdir", &
-                                                                   "dired_previous_line", &
-                                                                   "dired_sort_toggle_or_edit", &
-                                                                   "dired_summary", &
-                                                                   "dired_toggle_marks", &
-                                                                   "dired_undo", &
-                                                                   "dired_unmark", &
-                                                                   "dired_unmark_all_files", &
-                                                                   "dired_unmark_all_marks", &
-                                                                   "dired_unmark_backward", &
-                                                                   "dired_up_directory", &
-                                                                   "dired_why", &
-                                                                   "disable_command", &
-                                                                   "display_message_or_buffer", &
-                                                                   "do_auto_fill", &
-                                                                   "down_list", &
-                                                                   "downcase", &
-                                                                   "downcase_region", &
-                                                                   "downcase_word", &
-                                                                   "enable_command", &
-                                                                   "end_kbd_macro", &
-                                                                   "end_of_buffer", &
-                                                                   "end_of_line", &
-                                                                   "eobp", &
-                                                                   "eolp", &
-                                                                   "exchange_point_and_mark", &
-                                                                   "execute_extended_command", &
-                                                                   "exit_minibuffer", &
-                                                                   "extract_rectangle", &
-                                                                   "extract_rectangle_bounds", &
-                                                                   "file_name_sans_versions", &
-                                                                   "file_to_register", &
-                                                                   "fill_french_nobreak_p", &
-                                                                   "fill_paragraph", &
-                                                                   "fill_polish_nobreak_p", &
-                                                                   "fill_region", &
-                                                                   "fill_region_as_paragraph", &
-                                                                   "fill_region_as_paragraph_default", &
-                                                                   "fill_single_char_nobreak_p", &
-                                                                   "fill_single_word_nobreak_p", &
-                                                                   "find_file", &
-                                                                   "find_file_other_window", &
-                                                                   "fixup_whitespace", &
-                                                                   "font_lock_add_keywords", &
-                                                                   "font_lock_anchored", &
-                                                                   "font_lock_change_mode", &
-                                                                   "font_lock_debug_fontify", &
-                                                                   "font_lock_defontify", &
-                                                                   "font_lock_fontify_block", &
-                                                                   "font_lock_fontify_buffer", &
-                                                                   "font_lock_highlight", &
-                                                                   "font_lock_keyword", &
-                                                                   "font_lock_mode", &
-                                                                   "font_lock_mode_set_explicitly", &
-                                                                   "font_lock_refresh_defaults", &
-                                                                   "font_lock_update", &
-                                                                   "format_error", &
-                                                                   "forward_char", &
-                                                                   "forward_comment", &
-                                                                   "forward_line", &
-                                                                   "forward_list", &
-                                                                   "forward_paragraph", &
-                                                                   "forward_sentence", &
-                                                                   "forward_sexp", &
-                                                                   "forward_word", &
-                                                                   "free_process", &
-                                                                   "fundamental_mode", &
-                                                                   "get_buffer_create", &
-                                                                   "get_buffer_process", &
-                                                                   "get_process", &
-                                                                   "get_register", &
-                                                                   "global_font_lock_mode", &
-                                                                   "global_font_lock_mode_enable_in_buffer", &
-                                                                   "global_set_key", &
-                                                                   "goto_char", &
-                                                                   "help_mode", &
-                                                                   "help_quit", &
-                                                                   "increment_register", &
-                                                                   "indent_according_to_mode", &
-                                                                   "indent_for_tab_command", &
-                                                                   "indent_region", &
-                                                                   "indent_relative", &
-                                                                   "indent_relative_first_indent_point", &
-                                                                   "indent_rigidly", &
-                                                                   "indent_rigidly_left", &
-                                                                   "indent_rigidly_left_to_tab_stop", &
-                                                                   "indent_rigidly_right", &
-                                                                   "indent_rigidly_right_to_tab_stop", &
-                                                                   "indent_tabs_mode", &
-                                                                   "indent_to", &
-                                                                   "insert", &
-                                                                   "insert_rectangle", &
-                                                                   "insert_register", &
-                                                                   "internal_default_process_filter", &
-                                                                   "internal_default_process_sentinel", &
-                                                                   "internal_default_signal_process", &
-                                                                   "interrupt_process", &
-                                                                   "isearch_abort", &
-                                                                   "isearch_backward", &
-                                                                   "isearch_backward_regexp", &
-                                                                   "isearch_beginning_of_buffer", &
-                                                                   "isearch_cancel", &
-                                                                   "isearch_del_char", &
-                                                                   "isearch_delete_char", &
-                                                                   "isearch_edit_string", &
-                                                                   "isearch_end_of_buffer", &
-                                                                   "isearch_exit", &
-                                                                   "isearch_forward", &
-                                                                   "isearch_forward_regexp", &
-                                                                   "isearch_printing_char", &
-                                                                   "isearch_quote_char", &
-                                                                   "isearch_repeat_backward", &
-                                                                   "isearch_repeat_forward", &
-                                                                   "isearch_ring_advance", &
-                                                                   "isearch_ring_retreat", &
-                                                                   "isearch_toggle_case_fold", &
-                                                                   "isearch_toggle_lax_whitespace", &
-                                                                   "isearch_toggle_regexp", &
-                                                                   "isearch_yank_char", &
-                                                                   "isearch_yank_kill", &
-                                                                   "isearch_yank_line", &
-                                                                   "isearch_yank_pop_only", &
-                                                                   "isearch_yank_word_or_char", &
-                                                                   "join_line", &
-                                                                   "jump_to_register", &
-                                                                   "just_one_space", &
-                                                                   "justify_current_line", &
-                                                                   "key_valid_p", &
-                                                                   "keyboard_quit", &
-                                                                   "keymap_global_set", &
-                                                                   "keymap_set", &
-                                                                   "kill_buffer", &
-                                                                   "kill_compilation", &
-                                                                   "kill_line", &
-                                                                   "kill_new", &
-                                                                   "kill_paragraph", &
-                                                                   "kill_process", &
-                                                                   "kill_rectangle", &
-                                                                   "kill_region", &
-                                                                   "kill_ring_save", &
-                                                                   "kill_sentence", &
-                                                                   "kill_sexp", &
-                                                                   "kill_whole_line", &
-                                                                   "kill_word", &
-                                                                   "kmacro_add_counter", &
-                                                                   "kmacro_call_macro", &
-                                                                   "kmacro_call_macro_repeat", &
-                                                                   "kmacro_call_ring_2nd", &
-                                                                   "kmacro_call_ring_2nd_repeat", &
-                                                                   "kmacro_cycle_ring_next", &
-                                                                   "kmacro_cycle_ring_previous", &
-                                                                   "kmacro_delete_ring_head", &
-                                                                   "kmacro_end_and_call_macro", &
-                                                                   "kmacro_end_macro", &
-                                                                   "kmacro_end_or_call_macro", &
-                                                                   "kmacro_end_or_call_macro_repeat", &
-                                                                   "kmacro_insert_counter", &
-                                                                   "kmacro_quit_counter_equal", &
-                                                                   "kmacro_quit_counter_greater", &
-                                                                   "kmacro_quit_counter_less", &
-                                                                   "kmacro_redisplay", &
-                                                                   "kmacro_reg_add_counter_equal", &
-                                                                   "kmacro_reg_add_counter_greater", &
-                                                                   "kmacro_reg_add_counter_less", &
-                                                                   "kmacro_reg_load_counter", &
-                                                                   "kmacro_reg_save_counter", &
-                                                                   "kmacro_set_counter", &
-                                                                   "kmacro_set_format", &
-                                                                   "kmacro_start_macro", &
-                                                                   "kmacro_start_macro_or_insert_counter", &
-                                                                   "kmacro_swap_ring", &
-                                                                   "kmacro_view_macro", &
-                                                                   "kmacro_view_macro_repeat", &
-                                                                   "kmacro_view_ring_2nd", &
-                                                                   "left_char", &
-                                                                   "left_word", &
-                                                                   "line_number_at_pos", &
-                                                                   "list_registers", &
-                                                                   "looking_at", &
-                                                                   "looking_at_p", &
-                                                                   "looking_back", &
-                                                                   "major_mode_named", &
-                                                                   "make_process", &
-                                                                   "make_syntax_table", &
-                                                                   "map_query_replace_regexp", &
-                                                                   "mark", &
-                                                                   "mark_end_of_sentence", &
-                                                                   "mark_paragraph", &
-                                                                   "mark_sexp", &
-                                                                   "mark_whole_buffer", &
-                                                                   "mark_word", &
-                                                                   "match_beginning", &
-                                                                   "match_data", &
-                                                                   "match_end", &
-                                                                   "match_string", &
-                                                                   "match_string_no_properties", &
-                                                                   "match_substitute_replacement", &
-                                                                   "message", &
-                                                                   "minibuffer_complete", &
-                                                                   "minibuffer_complete_and_exit", &
-                                                                   "minibuffer_complete_word", &
-                                                                   "minibuffer_completion_exit", &
-                                                                   "minibuffer_completion_help", &
-                                                                   "minibuffer_recenter_top_bottom", &
-                                                                   "minibuffer_scroll_down_command", &
-                                                                   "minibuffer_scroll_up_command", &
-                                                                   "modify_syntax_entry", &
-                                                                   "move_beginning_of_line", &
-                                                                   "move_end_of_line", &
-                                                                   "move_to_left_margin", &
-                                                                   "move_to_tab_stop", &
-                                                                   "move_to_window_line", &
-                                                                   "move_to_window_line_top_bottom", &
-                                                                   "negative_argument", &
-                                                                   "newline", &
-                                                                   "next_buffer", &
-                                                                   "next_history_element", &
-                                                                   "next_line", &
-                                                                   "next_line_or_history_element", &
-                                                                   "normal_mode", &
-                                                                   "num_processors", &
-                                                                   "number_to_register", &
-                                                                   "open_line", &
-                                                                   "open_rectangle", &
-                                                                   "other_buffer", &
-                                                                   "other_window", &
-                                                                   "parse_partial_sexp", &
-                                                                   "point", &
-                                                                   "point_max", &
-                                                                   "point_min", &
-                                                                   "point_to_register", &
-                                                                   "pop_to_mark_command", &
-                                                                   "posix_looking_at", &
-                                                                   "posix_search_backward", &
-                                                                   "posix_search_forward", &
-                                                                   "posix_string_match", &
-                                                                   "prepend_to_register", &
-                                                                   "previous_buffer", &
-                                                                   "previous_history_element", &
-                                                                   "previous_line", &
-                                                                   "previous_line_or_history_element", &
-                                                                   "process_buffer", &
-                                                                   "process_command", &
-                                                                   "process_exit_status", &
-                                                                   "process_id", &
-                                                                   "process_list", &
-                                                                   "process_live_p", &
-                                                                   "process_mark", &
-                                                                   "process_name", &
-                                                                   "process_query_on_exit_flag", &
-                                                                   "process_send_eof", &
-                                                                   "process_send_region", &
-                                                                   "process_send_string", &
-                                                                   "process_status", &
-                                                                   "process_tty_name", &
-                                                                   "processp", &
-                                                                   "prog_mode", &
-                                                                   "provided_mode_derived_p", &
-                                                                   "push_mark", &
-                                                                   "query_replace", &
-                                                                   "query_replace_regexp", &
-                                                                   "quit_process", &
-                                                                   "quit_window", &
-                                                                   "quoted_insert", &
-                                                                   "re_search_backward", &
-                                                                   "re_search_forward", &
-                                                                   "read_buffer", &
-                                                                   "read_file_name_default", &
-                                                                   "read_multiple_choice", &
-                                                                   "read_number", &
-                                                                   "read_shell_command", &
-                                                                   "read_string", &
-                                                                   "recenter", &
-                                                                   "recenter_top_bottom", &
-                                                                   "recompile", &
-                                                                   "rectangle_dimensions", &
-                                                                   "rectangle_intersect_p", &
-                                                                   "rectangle_number_lines", &
-                                                                   "rectangle_position_as_coordinates", &
-                                                                   "regexp_quote", &
-                                                                   "region_active_p", &
-                                                                   "region_beginning", &
-                                                                   "region_end", &
-                                                                   "register_read_with_preview", &
-                                                                   "replace_match", &
-                                                                   "replace_regexp", &
-                                                                   "replace_string", &
-                                                                   "revert_buffer", &
-                                                                   "right_char", &
-                                                                   "right_word", &
-                                                                   "rotate_yank_pointer", &
-                                                                   "run_mode_hooks", &
-                                                                   "save_buffer", &
-                                                                   "save_buffers_kill_terminal", &
-                                                                   "save_some_buffers", &
-                                                                   "scan_lists", &
-                                                                   "scan_sexps", &
-                                                                   "scroll_down", &
-                                                                   "scroll_down_command", &
-                                                                   "scroll_other_window", &
-                                                                   "scroll_other_window_down", &
-                                                                   "scroll_up", &
-                                                                   "scroll_up_command", &
-                                                                   "search_backward", &
-                                                                   "search_forward", &
-                                                                   "select_window", &
-                                                                   "selected_window", &
-                                                                   "self_insert_command", &
-                                                                   "sentence_end", &
-                                                                   "set_auto_mode", &
-                                                                   "set_buffer", &
-                                                                   "set_command_disabled", &
-                                                                   "set_error", &
-                                                                   "set_fill_column", &
-                                                                   "set_fill_prefix", &
-                                                                   "set_mark", &
-                                                                   "set_mark_command", &
-                                                                   "set_match_data", &
-                                                                   "set_process_buffer", &
-                                                                   "set_process_filter", &
-                                                                   "set_process_query_on_exit_flag", &
-                                                                   "set_process_sentinel", &
-                                                                   "set_register", &
-                                                                   "set_syntax_table", &
-                                                                   "shell_command", &
-                                                                   "shell_command_on_region", &
-                                                                   "skip_chars_backward", &
-                                                                   "skip_chars_forward", &
-                                                                   "skip_syntax_backward", &
-                                                                   "skip_syntax_forward", &
-                                                                   "spaces_string", &
-                                                                   "special_mode", &
-                                                                   "split_window", &
-                                                                   "split_window_below", &
-                                                                   "split_window_right", &
-                                                                   "standard_syntax_table", &
-                                                                   "start_kbd_macro", &
-                                                                   "start_process", &
-                                                                   "string_insert_rectangle", &
-                                                                   "string_match", &
-                                                                   "string_match_p", &
-                                                                   "string_rectangle", &
-                                                                   "substitute_command_keys", &
-                                                                   "switch_to_buffer", &
-                                                                   "syntax_table", &
-                                                                   "tab_to_tab_stop", &
-                                                                   "text_mode", &
-                                                                   "transient_mark_mode", &
-                                                                   "transpose_chars", &
-                                                                   "transpose_lines", &
-                                                                   "transpose_paragraphs", &
-                                                                   "transpose_sentences", &
-                                                                   "transpose_words", &
-                                                                   "turn_off_auto_fill", &
-                                                                   "turn_on_auto_fill", &
-                                                                   "turn_on_font_lock", &
-                                                                   "turn_on_font_lock_if_desired", &
-                                                                   "undefined", &
-                                                                   "undo", &
-                                                                   "undo_boundary", &
-                                                                   "undo_only", &
-                                                                   "undo_redo", &
-                                                                   "unfill_paragraph", &
-                                                                   "universal_argument", &
-                                                                   "universal_argument_minus", &
-                                                                   "universal_argument_more", &
-                                                                   "up_list", &
-                                                                   "upcase", &
-                                                                   "upcase_initials", &
-                                                                   "upcase_initials_region", &
-                                                                   "upcase_region", &
-                                                                   "upcase_word", &
-                                                                   "view_register", &
-                                                                   "where_is", &
-                                                                   "window_configuration_to_register", &
-                                                                   "write_file", &
-                                                                   "y_or_n_p", &
-                                                                   "y_or_n_p_insert_n", &
-                                                                   "y_or_n_p_insert_other", &
-                                                                   "y_or_n_p_insert_y", &
-                                                                   "yank", &
-                                                                   "yank_pop", &
-                                                                   "yank_rectangle", &
+    character(len=38), parameter, public :: function_names(516) = [character(len=38) :: &
+                                            "abort_minibuffers", "abort_recursive_edit", "accept_process_output", "add_auto_mode", &
+                                              "append_to_register", "apply_on_rectangle", "auto_fill_mode", "back_to_indentation", &
+                                                      "backward_char", "backward_delete_char_untabify", "backward_kill_paragraph", &
+                                            "backward_kill_sentence", "backward_kill_sexp", "backward_kill_word", "backward_list", &
+                                                   "backward_paragraph", "backward_sentence", "backward_sexp", "backward_up_list", &
+                                            "backward_word", "beginning_of_buffer", "beginning_of_line", "beginning_of_line_text", &
+                                            "blink_matching_check_mismatch", "blink_matching_open", "bobp", "bolp", "buffer_name", &
+                                                   "buffer_substring", "buffer_to_register", "bury_buffer", "call_last_kbd_macro", &
+                                                    "cancel_timer", "canonically_space_region", "capitalize", "capitalize_region", &
+                                                          "capitalize_word", "char_syntax", "clear_rectangle", "compilation_mode", &
+                                           "compilation_start", "compile", "copy_rectangle_as_kill", "copy_rectangle_to_register", &
+                                                    "copy_region_as_kill", "copy_syntax_table", "copy_to_register", "count_lines", &
+                                             "current_buffer", "current_fill_column", "current_global_map", "current_indentation", &
+                                                      "current_justification", "current_kill", "cycle_spacing", "deactivate_mark", &
+                                                            "default_indent_new_line", "delete_all_space", "delete_backward_char", &
+                                           "delete_blank_lines", "delete_char", "delete_extract_rectangle", "delete_forward_char", &
+                                                          "delete_horizontal_space", "delete_indentation", "delete_other_windows", &
+                                             "delete_process", "delete_rectangle", "delete_region", "delete_whitespace_rectangle", &
+                                                           "delete_window", "derived_mode_p", "describe_function", "describe_key", &
+                                                           "describe_key_briefly", "describe_variable", "digit_argument", "dired", &
+                                                  "dired_build_subdir_alist", "dired_change_marks", "dired_copy_filename_as_kill", &
+                                                                "dired_create_directory", "dired_display_file", "dired_do_delete", &
+                                                               "dired_do_flagged_delete", "dired_do_redisplay", "dired_find_file", &
+                                          "dired_find_file_other_window", "dired_flag_auto_save_files", "dired_flag_backup_files", &
+                                                "dired_flag_file_deletion", "dired_flag_files_regexp", "dired_flag_garbage_files", &
+                                                   "dired_goto_file", "dired_kill_subdir", "dired_mark", "dired_mark_directories", &
+                                                                   "dired_mark_executables", "dired_mark_files_containing_regexp", &
+                                                      "dired_mark_files_regexp", "dired_mark_subdir_files", "dired_mark_symlinks", &
+                                                  "dired_mode", "dired_next_dirline", "dired_next_line", "dired_next_marked_file", &
+                                                            "dired_next_subdir", "dired_noselect", "dired_number_of_marked_files", &
+                                                             "dired_other_window", "dired_prev_dirline", "dired_prev_marked_file", &
+                                         "dired_prev_subdir", "dired_previous_line", "dired_sort_toggle_or_edit", "dired_summary", &
+                                                     "dired_toggle_marks", "dired_undo", "dired_unmark", "dired_unmark_all_files", &
+                                             "dired_unmark_all_marks", "dired_unmark_backward", "dired_up_directory", "dired_why", &
+                                          "disable_command", "display_message_or_buffer", "do_auto_fill", "down_list", "downcase", &
+                                                               "downcase_region", "downcase_word", "electric_indent_just_newline", &
+                                                                   "electric_indent_local_mode", "electric_indent_mode", &
+                                                        "electric_newline_and_maybe_indent", "electric_pair_conservative_inhibit", &
+                                                               "electric_pair_default_inhibit", "electric_pair_default_skip_self", &
+                                                    "electric_pair_delete_pair", "electric_pair_local_mode", "electric_pair_mode", &
+                                                "enable_command", "end_kbd_macro", "end_of_buffer", "end_of_line", "eobp", "eolp", &
+                                                         "exchange_point_and_mark", "execute_extended_command", "exit_minibuffer", &
+                                                       "extract_rectangle", "extract_rectangle_bounds", "file_name_sans_versions", &
+                                           "file_to_register", "fill_french_nobreak_p", "fill_paragraph", "fill_polish_nobreak_p", &
+                                                    "fill_region", "fill_region_as_paragraph", "fill_region_as_paragraph_default", &
+                                                          "fill_single_char_nobreak_p", "fill_single_word_nobreak_p", "find_file", &
+                                                           "find_file_other_window", "fixup_whitespace", "font_lock_add_keywords", &
+                                                         "font_lock_anchored", "font_lock_change_mode", "font_lock_debug_fontify", &
+                                                     "font_lock_defontify", "font_lock_fontify_block", "font_lock_fontify_buffer", &
+                                                                   "font_lock_highlight", "font_lock_keyword", "font_lock_mode", &
+                                                "font_lock_mode_set_explicitly", "font_lock_refresh_defaults", "font_lock_update", &
+                                                "format_error", "forward_char", "forward_comment", "forward_line", "forward_list", &
+                                          "forward_paragraph", "forward_sentence", "forward_sexp", "forward_word", "free_process", &
+                                                      "free_timer", "fundamental_mode", "get_buffer_create", "get_buffer_process", &
+                                                                   "get_process", "get_register", "global_font_lock_mode", &
+                                             "global_font_lock_mode_enable_in_buffer", "global_set_key", "goto_char", "help_mode", &
+                                          "help_quit", "increment_register", "indent_according_to_mode", "indent_for_tab_command", &
+                                                         "indent_region", "indent_relative", "indent_relative_first_indent_point", &
+                                                       "indent_rigidly", "indent_rigidly_left", "indent_rigidly_left_to_tab_stop", &
+                                                   "indent_rigidly_right", "indent_rigidly_right_to_tab_stop", "indent_tabs_mode", &
+                                                                   "indent_to", "insert", "insert_rectangle", "insert_register", &
+                                                           "internal_default_process_filter", "internal_default_process_sentinel", &
+                                                          "internal_default_signal_process", "interrupt_process", "isearch_abort", &
+                                                     "isearch_backward", "isearch_backward_regexp", "isearch_beginning_of_buffer", &
+                                               "isearch_cancel", "isearch_del_char", "isearch_delete_char", "isearch_edit_string", &
+                                             "isearch_end_of_buffer", "isearch_exit", "isearch_forward", "isearch_forward_regexp", &
+                                                         "isearch_printing_char", "isearch_quote_char", "isearch_repeat_backward", &
+                                                         "isearch_repeat_forward", "isearch_ring_advance", "isearch_ring_retreat", &
+                                             "isearch_toggle_case_fold", "isearch_toggle_lax_whitespace", "isearch_toggle_regexp", &
+                                           "isearch_yank_char", "isearch_yank_kill", "isearch_yank_line", "isearch_yank_pop_only", &
+                                                   "isearch_yank_word_or_char", "join_line", "jump_to_register", "just_one_space", &
+                                                      "justify_current_line", "key_valid_p", "keyboard_quit", "keymap_global_set", &
+                                                         "keymap_set", "kill_buffer", "kill_compilation", "kill_line", "kill_new", &
+                                              "kill_paragraph", "kill_process", "kill_rectangle", "kill_region", "kill_ring_save", &
+                                               "kill_sentence", "kill_sexp", "kill_whole_line", "kill_word", "kmacro_add_counter", &
+                                                          "kmacro_call_macro", "kmacro_call_macro_repeat", "kmacro_call_ring_2nd", &
+                                            "kmacro_call_ring_2nd_repeat", "kmacro_cycle_ring_next", "kmacro_cycle_ring_previous", &
+                                                       "kmacro_delete_ring_head", "kmacro_end_and_call_macro", "kmacro_end_macro", &
+                                           "kmacro_end_or_call_macro", "kmacro_end_or_call_macro_repeat", "kmacro_insert_counter", &
+                                           "kmacro_quit_counter_equal", "kmacro_quit_counter_greater", "kmacro_quit_counter_less", &
+                                             "kmacro_redisplay", "kmacro_reg_add_counter_equal", "kmacro_reg_add_counter_greater", &
+                                              "kmacro_reg_add_counter_less", "kmacro_reg_load_counter", "kmacro_reg_save_counter", &
+                                                                  "kmacro_set_counter", "kmacro_set_format", "kmacro_start_macro", &
+                                                  "kmacro_start_macro_or_insert_counter", "kmacro_swap_ring", "kmacro_view_macro", &
+                                                     "kmacro_view_macro_repeat", "kmacro_view_ring_2nd", "left_char", "left_word", &
+                                             "line_number_at_pos", "list_registers", "looking_at", "looking_at_p", "looking_back", &
+                                              "major_mode_named", "make_process", "make_syntax_table", "map_query_replace_regexp", &
+                                               "mark", "mark_end_of_sentence", "mark_paragraph", "mark_sexp", "mark_whole_buffer", &
+                                                        "mark_word", "match_beginning", "match_data", "match_end", "match_string", &
+                                                          "match_string_no_properties", "match_substitute_replacement", "message", &
+                                                "minibuffer_complete", "minibuffer_complete_and_exit", "minibuffer_complete_word", &
+                                                                   "minibuffer_completion_exit", "minibuffer_completion_help", &
+                                                               "minibuffer_recenter_top_bottom", "minibuffer_scroll_down_command", &
+                                                  "minibuffer_scroll_up_command", "modify_syntax_entry", "move_beginning_of_line", &
+                                             "move_end_of_line", "move_to_left_margin", "move_to_tab_stop", "move_to_window_line", &
+                                           "move_to_window_line_top_bottom", "negative_argument", "newline", "newline_and_indent", &
+                                               "next_buffer", "next_history_element", "next_line", "next_line_or_history_element", &
+                                             "normal_mode", "num_processors", "number_to_register", "open_line", "open_rectangle", &
+                                          "other_buffer", "other_window", "parse_partial_sexp", "point", "point_max", "point_min", &
+                                          "point_to_register", "pop_to_mark_command", "posix_looking_at", "posix_search_backward", &
+                                           "posix_search_forward", "posix_string_match", "prepend_to_register", "previous_buffer", &
+                                                  "previous_history_element", "previous_line", "previous_line_or_history_element", &
+                                         "process_buffer", "process_command", "process_exit_status", "process_id", "process_list", &
+                                                   "process_live_p", "process_mark", "process_name", "process_query_on_exit_flag", &
+                                               "process_send_eof", "process_send_region", "process_send_string", "process_status", &
+                                              "process_tty_name", "processp", "prog_mode", "provided_mode_derived_p", "push_mark", &
+                                          "query_replace", "query_replace_regexp", "quit_process", "quit_window", "quoted_insert", &
+                                               "re_search_backward", "re_search_forward", "read_buffer", "read_file_name_default", &
+                                           "read_multiple_choice", "read_number", "read_shell_command", "read_string", "recenter", &
+                                              "recenter_top_bottom", "recompile", "rectangle_dimensions", "rectangle_intersect_p", &
+                                                    "rectangle_number_lines", "rectangle_position_as_coordinates", "regexp_quote", &
+                                                "region_active_p", "region_beginning", "region_end", "register_read_with_preview", &
+                                               "replace_match", "replace_regexp", "replace_string", "revert_buffer", "right_char", &
+                                                             "right_word", "rotate_yank_pointer", "run_at_time", "run_mode_hooks", &
+                                             "run_with_idle_timer", "run_with_timer", "save_buffer", "save_buffers_kill_terminal", &
+                                            "save_some_buffers", "scan_lists", "scan_sexps", "scroll_down", "scroll_down_command", &
+                                              "scroll_other_window", "scroll_other_window_down", "scroll_up", "scroll_up_command", &
+                                                          "search_backward", "search_forward", "select_window", "selected_window", &
+                                                             "self_insert_command", "sentence_end", "set_auto_mode", "set_buffer", &
+                                            "set_command_disabled", "set_error", "set_fill_column", "set_fill_prefix", "set_mark", &
+                                                 "set_mark_command", "set_match_data", "set_process_buffer", "set_process_filter", &
+                                                         "set_process_query_on_exit_flag", "set_process_sentinel", "set_register", &
+                                            "set_syntax_table", "shell_command", "shell_command_on_region", "show_paren__default", &
+                                                       "show_paren_default_predicate", "show_paren_local_mode", "show_paren_mode", &
+                                                              "skip_chars_backward", "skip_chars_forward", "skip_syntax_backward", &
+                                                           "skip_syntax_forward", "spaces_string", "special_mode", "split_window", &
+                                           "split_window_below", "split_window_right", "standard_syntax_table", "start_kbd_macro", &
+                                                     "start_process", "string_insert_rectangle", "string_match", "string_match_p", &
+                                                "string_rectangle", "substitute_command_keys", "switch_to_buffer", "syntax_table", &
+                                               "tab_to_tab_stop", "text_mode", "timerp", "transient_mark_mode", "transpose_chars", &
+                                              "transpose_lines", "transpose_paragraphs", "transpose_sentences", "transpose_words", &
+                                                                   "turn_off_auto_fill", "turn_on_auto_fill", "turn_on_font_lock", &
+                                                "turn_on_font_lock_if_desired", "undefined", "undo", "undo_boundary", "undo_only", &
+                                                "undo_redo", "unfill_paragraph", "universal_argument", "universal_argument_minus", &
+                                                                "universal_argument_more", "up_list", "upcase", "upcase_initials", &
+                                            "upcase_initials_region", "upcase_region", "upcase_word", "view_register", "where_is", &
+                                                "window_configuration_to_register", "write_file", "y_or_n_p", "y_or_n_p_insert_n", &
+                                               "y_or_n_p_insert_other", "y_or_n_p_insert_y", "yank", "yank_pop", "yank_rectangle", &
                                                                    "yes_or_no_p"]
 
     !> The documented variables, sorted.
-    character(len=44), parameter, public :: variable_names(246) = [character(len=44) :: &
-                                                                   "adaptive_fill_first_line_regexp", &
-                                                                   "adaptive_fill_mode", &
-                                                                   "adaptive_fill_regexp", &
-                                                                   "after_change_functions", &
-                                                                   "after_change_major_mode_hook", &
-                                                                   "amalgamating_undo_limit", &
-                                                                   "auto_fill_chars", &
-                                                                   "auto_fill_function", &
-                                                                   "auto_fill_inhibit_regexp", &
-                                                                   "auto_fill_mode_hook", &
-                                                                   "before_change_functions", &
-                                                                   "case_fold_search", &
-                                                                   "case_replace", &
-                                                                   "case_symbols_as_words", &
-                                                                   "change_major_mode_after_body_hook", &
-                                                                   "change_major_mode_hook", &
-                                                                   "change_major_mode_with_file_name", &
-                                                                   "colon_double_space", &
-                                                                   "comint_inhibit_carriage_motion", &
-                                                                   "commands", &
-                                                                   "comment_end_can_be_escaped", &
-                                                                   "comment_use_syntax_ppss", &
-                                                                   "compilation_always_kill", &
-                                                                   "compilation_ask_about_save", &
-                                                                   "compilation_directory", &
-                                                                   "compilation_disable_input", &
-                                                                   "compilation_filter_hook", &
-                                                                   "compilation_filter_start", &
-                                                                   "compilation_mode_hook", &
-                                                                   "compilation_mode_map", &
-                                                                   "compilation_read_command", &
-                                                                   "compilation_scroll_output", &
-                                                                   "compile_command", &
-                                                                   "completion_auto_help", &
-                                                                   "completion_fail_discreetly", &
-                                                                   "completion_ignore_case", &
-                                                                   "completion_ignored_extensions", &
-                                                                   "completion_show_inline_help", &
-                                                                   "completions_max_height", &
-                                                                   "copy_region_blink_delay", &
-                                                                   "current_prefix_arg", &
-                                                                   "cycle_spacing_actions", &
-                                                                   "default_justification", &
-                                                                   "defining_kbd_macro", &
-                                                                   "delete_active_region", &
-                                                                   "delete_exited_processes", &
-                                                                   "directory_listing_before_filename_regexp", &
-                                                                   "dired__ls_error_buffer", &
-                                                                   "dired__ls_error_file", &
-                                                                   "dired_after_readin_hook", &
-                                                                   "dired_always_read_filesystem", &
-                                                                   "dired_auto_revert_buffer", &
-                                                                   "dired_before_readin_hook", &
-                                                                   "dired_broken_symlink", &
-                                                                   "dired_check_symlinks", &
-                                                                   "dired_del_marker", &
-                                                                   "dired_directory", &
-                                                                   "dired_directory_face", &
-                                                                   "dired_flagged", &
-                                                                   "dired_flagged_face", &
-                                                                   "dired_free_space", &
-                                                                   "dired_garbage_files_regexp", &
-                                                                   "dired_header", &
-                                                                   "dired_header_face", &
-                                                                   "dired_ignored", &
-                                                                   "dired_ignored_face", &
-                                                                   "dired_initial_position_hook", &
-                                                                   "dired_listing_switches", &
-                                                                   "dired_ls_f_marks_symlinks", &
-                                                                   "dired_mark", &
-                                                                   "dired_mark_face", &
-                                                                   "dired_mark_region", &
-                                                                   "dired_marked", &
-                                                                   "dired_marked_face", &
-                                                                   "dired_marker_char", &
-                                                                   "dired_mode_hook", &
-                                                                   "dired_mode_map", &
-                                                                   "dired_movement_style", &
-                                                                   "dired_no_confirm", &
-                                                                   "dired_perm_write", &
-                                                                   "dired_perm_write_face", &
-                                                                   "dired_recursive_deletes", &
-                                                                   "dired_set_id", &
-                                                                   "dired_sort_inhibit", &
-                                                                   "dired_special", &
-                                                                   "dired_switches_in_mode_line", &
-                                                                   "dired_symlink", &
-                                                                   "dired_symlink_face", &
-                                                                   "dired_trivial_filenames", &
-                                                                   "dired_use_ls_dired", &
-                                                                   "dired_warning", &
-                                                                   "dired_warning_face", &
-                                                                   "disabled_command_function", &
-                                                                   "display_buffer_mark_dedicated", &
-                                                                   "edmacro_eight_bits", &
-                                                                   "enable_recursive_minibuffers", &
-                                                                   "even_window_sizes", &
-                                                                   "fill_column", &
-                                                                   "fill_indent_according_to_mode", &
-                                                                   "fill_nobreak_predicate", &
-                                                                   "fill_prefix", &
-                                                                   "fill_separate_heterogeneous_words_with_space", &
-                                                                   "find_file_run_dired", &
-                                                                   "first_change_hook", &
-                                                                   "font_lock_defaults", &
-                                                                   "font_lock_dont_widen", &
-                                                                   "font_lock_extra_managed_props", &
-                                                                   "font_lock_global_modes", &
-                                                                   "font_lock_maximum_decoration", &
-                                                                   "font_lock_mode_hook", &
-                                                                   "font_lock_support_mode", &
-                                                                   "font_lock_verbose", &
-                                                                   "fontification_functions", &
-                                                                   "global_font_lock_mode_hook", &
-                                                                   "goal_column", &
-                                                                   "help_map", &
-                                                                   "help_mode_hook", &
-                                                                   "help_mode_map", &
-                                                                   "history_add_new_input", &
-                                                                   "history_delete_duplicates", &
-                                                                   "history_length", &
-                                                                   "indent_line_function", &
-                                                                   "indent_tabs_mode", &
-                                                                   "indent_tabs_mode_hook", &
-                                                                   "inhibit_auto_fill", &
-                                                                   "inhibit_field_text_motion", &
-                                                                   "inhibit_modification_hooks", &
-                                                                   "insert_default_directory", &
-                                                                   "insert_directory_program", &
-                                                                   "isearch_lax_whitespace", &
-                                                                   "isearch_mode_map", &
-                                                                   "isearch_regexp_lax_whitespace", &
-                                                                   "jit_lock_chunk_size", &
-                                                                   "kbd_macro_termination_hook", &
-                                                                   "kill_read_only_ok", &
-                                                                   "kill_ring_max", &
-                                                                   "kill_ring_yank_pointer", &
-                                                                   "kill_whole_line", &
-                                                                   "killed_rectangle", &
-                                                                   "kmacro_call_repeat_key", &
-                                                                   "kmacro_call_repeat_with_arg", &
-                                                                   "kmacro_counter", &
-                                                                   "kmacro_counter_format", &
-                                                                   "kmacro_counter_format_start", &
-                                                                   "kmacro_counter_value_start", &
-                                                                   "kmacro_default_counter_format", &
-                                                                   "kmacro_execute_before_append", &
-                                                                   "kmacro_initial_counter_value", &
-                                                                   "kmacro_keymap", &
-                                                                   "kmacro_last_counter", &
-                                                                   "kmacro_repeat_no_prefix", &
-                                                                   "kmacro_ring", &
-                                                                   "kmacro_ring_max", &
-                                                                   "last_input_event", &
-                                                                   "last_kbd_macro", &
-                                                                   "left_margin", &
-                                                                   "line_move_visual", &
-                                                                   "make_backup_files", &
-                                                                   "mark_even_if_inactive", &
-                                                                   "mark_ring_max", &
-                                                                   "minibuffer_completing_file_name", &
-                                                                   "minibuffer_local_shell_command_map", &
-                                                                   "minibuffer_message_timeout", &
-                                                                   "minibuffer_scroll_window", &
-                                                                   "mode_require_final_newline", &
-                                                                   "multibyte_syntax_as_symbol", &
-                                                                   "next_screen_context_lines", &
-                                                                   "open_paren_in_column_0_is_defun_start", &
-                                                                   "page_delimiter", &
-                                                                   "paragraph_ignore_fill_prefix", &
-                                                                   "paragraph_separate", &
-                                                                   "paragraph_start", &
-                                                                   "parse_sexp_ignore_comments", &
-                                                                   "pending_undo_list", &
-                                                                   "pop_up_windows", &
-                                                                   "process_connection_type", &
-                                                                   "prog_mode_hook", &
-                                                                   "prog_mode_map", &
-                                                                   "query_replace_defaults", &
-                                                                   "query_replace_from_history_variable", &
-                                                                   "query_replace_from_to_separator", &
-                                                                   "query_replace_show_replacement", &
-                                                                   "query_replace_skip_read_only", &
-                                                                   "query_replace_to_history_variable", &
-                                                                   "read_answer_short", &
-                                                                   "read_buffer_completion_ignore_case", &
-                                                                   "read_char_choice_use_read_key", &
-                                                                   "read_file_name_completion_ignore_case", &
-                                                                   "read_minibuffer_restore_windows", &
-                                                                   "read_quoted_char_radix", &
-                                                                   "regexp_search_ring_max", &
-                                                                   "register_alist", &
-                                                                   "register_separator", &
-                                                                   "replace_count", &
-                                                                   "replace_lax_whitespace", &
-                                                                   "replace_regexp_lax_whitespace", &
-                                                                   "require_final_newline", &
-                                                                   "revert_buffer_function", &
-                                                                   "revert_buffer_in_progress", &
-                                                                   "revert_buffer_preserve_modes", &
-                                                                   "scroll_error_top_bottom", &
-                                                                   "search_exit_option", &
-                                                                   "search_nonincremental_instead", &
-                                                                   "search_ring_max", &
-                                                                   "search_spaces_regexp", &
-                                                                   "search_upper_case", &
-                                                                   "search_whitespace_regexp", &
-                                                                   "sentence_end", &
-                                                                   "sentence_end_base", &
-                                                                   "sentence_end_double_space", &
-                                                                   "sentence_end_without_period", &
-                                                                   "sentence_end_without_space", &
-                                                                   "shell_command_default_error_buffer", &
-                                                                   "shell_command_dont_erase_buffer", &
-                                                                   "shell_command_prompt_show_cwd", &
-                                                                   "shell_command_switch", &
-                                                                   "shell_file_name", &
-                                                                   "special_mode_hook", &
-                                                                   "special_mode_map", &
-                                                                   "split_height_threshold", &
-                                                                   "split_width_threshold", &
-                                                                   "split_window_preferred_direction", &
-                                                                   "standard_indent", &
-                                                                   "suggest_key_bindings", &
-                                                                   "tab_always_indent", &
-                                                                   "tab_stop_list", &
-                                                                   "tab_width", &
-                                                                   "text_mode_hook", &
-                                                                   "text_mode_map", &
-                                                                   "text_mode_syntax_table", &
-                                                                   "text_mode_variant", &
-                                                                   "transient_mark_mode", &
-                                                                   "transient_mark_mode_hook", &
-                                                                   "truncate_partial_width_windows", &
-                                                                   "undo_auto__this_command_amalgamating", &
-                                                                   "undo_in_progress", &
-                                                                   "undo_no_redo", &
-                                                                   "use_short_answers", &
-                                                                   "user_init_file", &
-                                                                   "visible_bell", &
-                                                                   "window_min_height", &
-                                                                   "window_min_width", &
-                                                                   "words_include_escapes", &
-                                                                   "y_or_n_p_history_variable", &
-                                                                   "y_or_n_p_use_read_key", &
-                                                                   "yes_or_no_prompt"]
+    character(len=44), parameter, public :: variable_names(279) = [character(len=44) :: &
+                                                  "adaptive_fill_first_line_regexp", "adaptive_fill_mode", "adaptive_fill_regexp", &
+                                              "after_change_functions", "after_change_major_mode_hook", "amalgamating_undo_limit", &
+                                                              "auto_fill_chars", "auto_fill_function", "auto_fill_inhibit_regexp", &
+                                         "auto_fill_mode_hook", "backward_delete_char_untabify_method", "before_change_functions", &
+                                                  "blink_matching_delay", "blink_matching_paren", "blink_matching_paren_distance", &
+                                                    "blink_matching_paren_dont_ignore_comments", "blink_matching_paren_on_screen", &
+                                                                   "case_fold_search", "case_replace", "case_symbols_as_words", &
+                                                                   "change_major_mode_after_body_hook", "change_major_mode_hook", &
+                                                                   "change_major_mode_with_file_name", "colon_double_space", &
+                                                       "comint_inhibit_carriage_motion", "commands", "comment_end_can_be_escaped", &
+                                               "comment_use_syntax_ppss", "compilation_always_kill", "compilation_ask_about_save", &
+                                                  "compilation_directory", "compilation_disable_input", "compilation_filter_hook", &
+                                                      "compilation_filter_start", "compilation_mode_hook", "compilation_mode_map", &
+                                                       "compilation_read_command", "compilation_scroll_output", "compile_command", &
+                                                   "completion_auto_help", "completion_fail_discreetly", "completion_ignore_case", &
+                                         "completion_ignored_extensions", "completion_show_inline_help", "completions_max_height", &
+                                                         "copy_region_blink_delay", "current_prefix_arg", "cycle_spacing_actions", &
+                                                            "default_justification", "defining_kbd_macro", "delete_active_region", &
+                                                            "delete_exited_processes", "directory_listing_before_filename_regexp", &
+                                                      "dired__ls_error_buffer", "dired__ls_error_file", "dired_after_readin_hook", &
+                                           "dired_always_read_filesystem", "dired_auto_revert_buffer", "dired_before_readin_hook", &
+                                            "dired_broken_symlink", "dired_check_symlinks", "dired_del_marker", "dired_directory", &
+                                                "dired_directory_face", "dired_flagged", "dired_flagged_face", "dired_free_space", &
+                                               "dired_garbage_files_regexp", "dired_header", "dired_header_face", "dired_ignored", &
+                                                    "dired_ignored_face", "dired_initial_position_hook", "dired_listing_switches", &
+                                                "dired_ls_f_marks_symlinks", "dired_mark", "dired_mark_face", "dired_mark_region", &
+                                                      "dired_marked", "dired_marked_face", "dired_marker_char", "dired_mode_hook", &
+                                                 "dired_mode_map", "dired_movement_style", "dired_no_confirm", "dired_perm_write", &
+                                         "dired_perm_write_face", "dired_recursive_deletes", "dired_set_id", "dired_sort_inhibit", &
+                                            "dired_special", "dired_switches_in_mode_line", "dired_symlink", "dired_symlink_face", &
+                                           "dired_trivial_filenames", "dired_use_ls_dired", "dired_warning", "dired_warning_face", &
+                                               "disabled_command_function", "display_buffer_mark_dedicated", "edmacro_eight_bits", &
+                                                            "electric_indent_chars", "electric_indent_functions_without_reindent", &
+                                                                   "electric_indent_inhibit", "electric_indent_local_mode_hook", &
+                                          "electric_indent_mode_hook", "electric_pair_local_mode_hook", "electric_pair_mode_hook", &
+                                                                "electric_pair_open_newline_between_pairs", "electric_pair_pairs", &
+                                                                "electric_pair_preserve_balance", "electric_pair_skip_whitespace", &
+                                                                "electric_pair_skip_whitespace_chars", "electric_pair_text_pairs", &
+                                           "electric_pair_text_syntax_table", "enable_recursive_minibuffers", "even_window_sizes", &
+                                          "fill_column", "fill_indent_according_to_mode", "fill_nobreak_predicate", "fill_prefix", &
+                                                            "fill_separate_heterogeneous_words_with_space", "find_file_run_dired", &
+                                                                "first_change_hook", "font_lock_defaults", "font_lock_dont_widen", &
+                                                                   "font_lock_extra_managed_props", "font_lock_global_modes", &
+                                                  "font_lock_maximum_decoration", "font_lock_mode_hook", "font_lock_support_mode", &
+                                                     "font_lock_verbose", "fontification_functions", "global_font_lock_mode_hook", &
+                                            "goal_column", "help_map", "help_mode_hook", "help_mode_map", "history_add_new_input", &
+                                                            "history_delete_duplicates", "history_length", "indent_line_function", &
+                                                                 "indent_tabs_mode", "indent_tabs_mode_hook", "inhibit_auto_fill", &
+                                            "inhibit_field_text_motion", "inhibit_modification_hooks", "insert_default_directory", &
+                                                         "insert_directory_program", "isearch_lax_whitespace", "isearch_mode_map", &
+                                             "isearch_regexp_lax_whitespace", "jit_lock_chunk_size", "kbd_macro_termination_hook", &
+                                                "kill_read_only_ok", "kill_ring_max", "kill_ring_yank_pointer", "kill_whole_line", &
+                                                      "killed_rectangle", "kmacro_call_repeat_key", "kmacro_call_repeat_with_arg", &
+                                                         "kmacro_counter", "kmacro_counter_format", "kmacro_counter_format_start", &
+                                                                   "kmacro_counter_value_start", "kmacro_default_counter_format", &
+                                                  "kmacro_execute_before_append", "kmacro_initial_counter_value", "kmacro_keymap", &
+                                               "kmacro_last_counter", "kmacro_repeat_no_prefix", "kmacro_ring", "kmacro_ring_max", &
+                                                          "last_input_event", "last_kbd_macro", "left_margin", "line_move_visual", &
+                                                                   "make_backup_files", "mark_even_if_inactive", "mark_ring_max", &
+                                                          "minibuffer_completing_file_name", "minibuffer_local_shell_command_map", &
+                                           "minibuffer_message_timeout", "minibuffer_scroll_window", "mode_require_final_newline", &
+                                                                   "multibyte_syntax_as_symbol", "next_screen_context_lines", &
+                                                                   "open_paren_in_column_0_is_defun_start", "page_delimiter", &
+                                                          "paragraph_ignore_fill_prefix", "paragraph_separate", "paragraph_start", &
+                                                              "parse_sexp_ignore_comments", "pending_undo_list", "pop_up_windows", &
+                                            "post_self_insert_hook", "process_connection_type", "prog_mode_hook", "prog_mode_map", &
+                                                                  "query_replace_defaults", "query_replace_from_history_variable", &
+                                                              "query_replace_from_to_separator", "query_replace_show_replacement", &
+                                         "query_replace_skip_read_only", "query_replace_to_history_variable", "read_answer_short", &
+                                                            "read_buffer_completion_ignore_case", "read_char_choice_use_read_key", &
+                                                       "read_file_name_completion_ignore_case", "read_minibuffer_restore_windows", &
+                                                             "read_quoted_char_radix", "regexp_search_ring_max", "register_alist", &
+                                                                  "register_separator", "replace_count", "replace_lax_whitespace", &
+                                               "replace_regexp_lax_whitespace", "require_final_newline", "revert_buffer_function", &
+                                           "revert_buffer_in_progress", "revert_buffer_preserve_modes", "scroll_error_top_bottom", &
+                                                         "search_exit_option", "search_nonincremental_instead", "search_ring_max", &
+                                          "search_spaces_regexp", "search_upper_case", "search_whitespace_regexp", "sentence_end", &
+                                                  "sentence_end_base", "sentence_end_double_space", "sentence_end_without_period", &
+                                                               "sentence_end_without_space", "shell_command_default_error_buffer", &
+                                                               "shell_command_dont_erase_buffer", "shell_command_prompt_show_cwd", &
+                                                   "shell_command_switch", "shell_file_name", "show_paren_context_when_offscreen", &
+                                               "show_paren_delay", "show_paren_highlight_openparen", "show_paren_local_mode_hook", &
+                                           "show_paren_mode_hook", "show_paren_not_in_comments_or_strings", "show_paren_priority", &
+                                                                   "show_paren_ring_bell_on_mismatch", "show_paren_style", &
+                                                       "show_paren_when_point_in_periphery", "show_paren_when_point_inside_paren", &
+                                                                "special_mode_hook", "special_mode_map", "split_height_threshold", &
+                                                   "split_width_threshold", "split_window_preferred_direction", "standard_indent", &
+                                                        "suggest_key_bindings", "tab_always_indent", "tab_stop_list", "tab_width", &
+                                                 "text_mode_hook", "text_mode_map", "text_mode_syntax_table", "text_mode_variant", &
+                                                           "timer_max_repeats", "transient_mark_mode", "transient_mark_mode_hook", &
+                                                         "truncate_partial_width_windows", "undo_auto__this_command_amalgamating", &
+                                                        "undo_in_progress", "undo_no_redo", "use_short_answers", "user_init_file", &
+                                                 "visible_bell", "window_min_height", "window_min_width", "words_include_escapes", &
+                                                           "y_or_n_p_history_variable", "y_or_n_p_use_read_key", "yes_or_no_prompt"]
 
     character(len=*), parameter :: LF = achar(10)
 
     interface repr
-        module procedure repr_logical, repr_integer, repr_int64, repr_int64s, repr_real, repr_string, repr_strings
+        module procedure repr_logical, repr_integer, repr_int64, repr_int64s, repr_integers, repr_real, repr_string, repr_strings
     end interface repr
 
 contains
@@ -1009,6 +525,21 @@ contains
                         "Depending on the bidirectional context, the movement may be to the"//LF// &
                         "right or to the left on the screen.  This is in contrast with"//LF// &
                         "\[left_char], which see."
+        case ("backward_delete_char_untabify")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "call backward_delete_char_untabify(arg, status, killp)"
+            entry%interactive = .true.
+            entry%doc = "Delete characters backward, changing tabs into spaces."//LF// &
+                        "The exact behavior depends on `backward_delete_char_untabify_method'."//LF// &
+                        ""//LF// &
+                        "Delete ARG chars, and kill (save in kill ring) if KILLP is true."//LF// &
+                        ""//LF// &
+                        "If Transient Mark mode is enabled, the mark is active, and ARG is 1,"//LF// &
+                        "delete the text in the region and deactivate the mark instead."//LF// &
+                        "To disable this, set option `delete_active_region' to false."//LF// &
+                        ""//LF// &
+                        "Interactively, ARG is the prefix arg (default 1)"//LF// &
+                        "and KILLP is true if a prefix arg was specified."
         case ("backward_kill_paragraph")
             entry%file = "paragraphs_fm.f90"
             entry%fortran = "call backward_kill_paragraph(arg, status)"
@@ -1151,6 +682,18 @@ contains
                         "centering or right-justifying the line, but does not move past"//LF// &
                         "any whitespace that was explicitly inserted (such as a tab used"//LF// &
                         "to indent the first line of a paragraph)."
+        case ("blink_matching_check_mismatch")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_check_mismatch(start, end)"
+            entry%doc = "Return whether or not START...END are matching parens."//LF// &
+                        "END is the current point and START is the blink position."//LF// &
+                        "START might be 0 if no matching starter was found."//LF// &
+                        "Returns true if we find there is a mismatch."
+        case ("blink_matching_open")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "call blink_matching_open(status)"
+            entry%interactive = .true.
+            entry%doc = "Momentarily highlight the beginning of the sexp before point."
         case ("bobp")
             entry%file = "editfns_fm.f90"
             entry%fortran = "bobp()"
@@ -1197,6 +740,10 @@ contains
                         ""//LF// &
                         "A prefix argument serves as a repeat count.  Zero means repeat until"//LF// &
                         "error."
+        case ("cancel_timer")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "call cancel_timer(timer)"
+            entry%doc = "Remove TIMER from the list of active timers."
         case ("canonically_space_region")
             entry%file = "fill_fm.f90"
             entry%fortran = "call canonically_space_region(beg, end, status)"
@@ -1950,6 +1497,81 @@ contains
                         "point is ignored when moving forward."//LF// &
                         ""//LF// &
                         "With negative argument, convert previous words but do not move."
+        case ("electric_indent_just_newline")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "call electric_indent_just_newline(status)"
+            entry%interactive = .true.
+            entry%doc = "Insert just a newline, without any auto-indentation."
+        case ("electric_indent_local_mode")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "call electric_indent_local_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle `electric_indent_mode' only in this buffer."
+        case ("electric_indent_mode")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "call electric_indent_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle on-the-fly reindentation of text lines (Electric Indent mode)."//LF// &
+                        ""//LF// &
+                        "When enabled, this reindents whenever the hook `electric_indent_functions'"//LF// &
+                        "returns true, or if you insert one of the ""electric characters""."//LF// &
+                        "The electric characters normally include the newline, but can"//LF// &
+                        "also include other characters as needed by the major mode; see"//LF// &
+                        "`electric_indent_chars' for the actual list."//LF// &
+                        ""//LF// &
+                        "By ""reindent"" we mean remove any existing indentation, and then"//LF// &
+                        "indent the line according to context and rules of the major mode."//LF// &
+                        ""//LF// &
+                        "This is a global minor mode.  To toggle the mode in a single buffer,"//LF// &
+                        "use `electric_indent_local_mode'."
+        case ("electric_newline_and_maybe_indent")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "call electric_newline_and_maybe_indent(status)"
+            entry%interactive = .true.
+            entry%doc = "Insert a newline."//LF// &
+                        "If `electric_indent_mode' is enabled, that's that, but if it"//LF// &
+                        "is *disabled* then additionally indent according to major mode."//LF// &
+                        "Indentation is done using the value of `indent_line_function'."//LF// &
+                        "In programming language modes, this is the same as TAB."//LF// &
+                        "In some text modes, where TAB inserts a tab, this command indents to the"//LF// &
+                        "column specified by the function `current_left_margin'."
+        case ("electric_pair_conservative_inhibit")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_conservative_inhibit(char)"
+            entry%doc = "A conservative `electric_pair_inhibit_predicate'."
+        case ("electric_pair_default_inhibit")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_default_inhibit(char)"
+            entry%doc = "The default `electric_pair_inhibit_predicate': help balance."
+        case ("electric_pair_default_skip_self")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_default_skip_self(char)"
+            entry%doc = "The default `electric_pair_skip_self': help balance."
+        case ("electric_pair_delete_pair")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "call electric_pair_delete_pair(arg, status, killp)"
+            entry%interactive = .true.
+            entry%doc = "When between adjacent paired delimiters, delete both of them."//LF// &
+                        "ARG and KILLP are passed directly to"//LF// &
+                        "`backward_delete_char_untabify', which see."
+        case ("electric_pair_local_mode")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "call electric_pair_local_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle `electric_pair_mode' only in this buffer."
+        case ("electric_pair_mode")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "call electric_pair_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle automatic pairing of delimiters (Electric Pair mode)."//LF// &
+                        ""//LF// &
+                        "Electric Pair mode is a global minor mode.  When enabled, typing an"//LF// &
+                        "opening delimiter (parenthesis, bracket, etc.) automatically inserts the"//LF// &
+                        "corresponding closing delimiter.  If the region is active, the"//LF// &
+                        "delimiters are inserted around the region instead."//LF// &
+                        ""//LF// &
+                        "To toggle the mode only in the current buffer, use"//LF// &
+                        "`electric_pair_local_mode'."
         case ("enable_command")
             entry%file = "novice_fm.f90"
             entry%fortran = "call enable_command(command, status)"
@@ -2454,6 +2076,11 @@ contains
             entry%doc = "Free process `proc' (deleting it first if it is listed): the"//LF// &
                         "handle, and every copy of it, becomes invalid.  Ours: process"//LF// &
                         "objects are not garbage collected."
+        case ("free_timer")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "call free_timer(timer)"
+            entry%doc = "Cancel TIMER and release its handle, which becomes stale.  Not a"//LF// &
+                        "port: upstream relies on GC."
         case ("fundamental_mode")
             entry%file = "simple_fm.f90"
             entry%fortran = "call fundamental_mode(status)"
@@ -3750,7 +3377,21 @@ contains
                         "With prefix argument ARG, insert that many newlines."//LF// &
                         ""//LF// &
                         "If `auto_fill_mode' is enabled, this may cause automatic line"//LF// &
-                        "breaking of the preceding line.  A present ARG inhibits this."
+                        "breaking of the preceding line.  A present ARG inhibits this."//LF// &
+                        "If `electric_indent_mode' is enabled, this indents the final new line"//LF// &
+                        "that it adds, and reindents the preceding line.  To just insert"//LF// &
+                        "a newline, use \[electric_indent_just_newline]."
+        case ("newline_and_indent")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "call newline_and_indent(status, arg)"
+            entry%interactive = .true.
+            entry%doc = "Insert a newline, then indent according to major mode."//LF// &
+                        "Indentation is done using the value of `indent_line_function'."//LF// &
+                        "In programming language modes, this is the same as TAB."//LF// &
+                        "In some text modes, where TAB inserts a tab, this command indents to the"//LF// &
+                        "column specified by the function `current_left_margin'."//LF// &
+                        ""//LF// &
+                        "With ARG, perform this action that many times."
         case ("next_buffer")
             entry%file = "window_display_fm.f90"
             entry%interactive = .true.
@@ -4660,6 +4301,18 @@ contains
             entry%interactive = .true.
             entry%doc = "Rotate the yanking point in the kill ring."//LF// &
                         "With ARG, rotate that many kills forward (or backward, if negative)."
+        case ("run_at_time")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "call run_at_time(timer, time, function, status, repeat)"
+            entry%doc = "Perform an action at time TIME."//LF// &
+                        "Repeat the action every REPEAT seconds, if REPEAT is present."//LF// &
+                        "REPEAT may be a non-negative integer or floating point number."//LF// &
+                        "TIME is a number of seconds from now (0 meaning now)."//LF// &
+                        ""//LF// &
+                        "The action is to call FUNCTION."//LF// &
+                        ""//LF// &
+                        "This function returns a timer object which you can use in"//LF// &
+                        "`cancel_timer'."
         case ("run_mode_hooks")
             entry%file = "subr_fm.f90"
             entry%fortran = "call run_mode_hooks(status, hook)"
@@ -4673,6 +4326,34 @@ contains
                         ""//LF// &
                         "Major mode functions should use this instead of `run_hooks' when"//LF// &
                         "running their FOO_mode_hook."
+        case ("run_with_idle_timer")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "call run_with_idle_timer(timer, secs, repeat, function, status)"
+            entry%doc = "Perform an action the next time Emacs is idle for SECS seconds."//LF// &
+                        "The action is to call FUNCTION."//LF// &
+                        "SECS may be an integer, a floating point number, or the internal"//LF// &
+                        "time format returned by, e.g., `current_idle_time'."//LF// &
+                        "If Emacs is currently idle, and has been idle for N seconds (N < SECS),"//LF// &
+                        "then it will call FUNCTION in SECS - N seconds from now.  Using"//LF// &
+                        "SECS <= N is not recommended if this function is invoked from an idle"//LF// &
+                        "timer, because FUNCTION will then be called immediately."//LF// &
+                        ""//LF// &
+                        "If REPEAT is true, do the action each time Emacs has been idle for"//LF// &
+                        "exactly SECS seconds (that is, only once for each time Emacs becomes idle)."//LF// &
+                        ""//LF// &
+                        "This function returns a timer object which you can use in"//LF// &
+                        "`cancel_timer'."
+        case ("run_with_timer")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "call run_with_timer(timer, secs, function, status, repeat)"
+            entry%doc = "Perform an action after a delay of SECS seconds."//LF// &
+                        "Repeat the action every REPEAT seconds, if REPEAT is present."//LF// &
+                        "SECS and REPEAT may be integers or floating point numbers."//LF// &
+                        "REPEAT, if present, must be a non-negative number."//LF// &
+                        "The action is to call FUNCTION."//LF// &
+                        ""//LF// &
+                        "This function returns a timer object which you can use in"//LF// &
+                        "`cancel_timer'."
         case ("save_buffer")
             entry%file = "files_fm.f90"
             entry%fortran = "call save_buffer(arg, called_interactively, status)"
@@ -4872,7 +4553,11 @@ contains
             entry%interactive = .true.
             entry%doc = "Insert the character you type."//LF// &
                         "Whichever character C you type to run this command is inserted."//LF// &
-                        "The numeric prefix argument N says how many times to repeat the insertion."
+                        "The numeric prefix argument N says how many times to repeat the insertion."//LF// &
+                        "After insertion, `internal_auto_fill' is called if"//LF// &
+                        "`auto_fill_function' is true and if the `auto_fill_chars' table has"//LF// &
+                        "a true value for the inserted character.  At the end, it runs"//LF// &
+                        "`post_self_insert_hook'."
         case ("sentence_end")
             entry%file = "paragraphs_fm.f90"
             entry%fortran = "sentence_end_regexp()"
@@ -5022,6 +4707,37 @@ contains
                         "Normally display output (if any) in temp buffer specified by"//LF// &
                         "`shell_command_buffer_name'; prefix arg means replace the region"//LF// &
                         "with it."
+        case ("show_paren__default")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "call show_paren_default(found, data)"
+            entry%doc = "Find the opener/closer near point and its match."//LF// &
+                        ""//LF// &
+                        "It is the default value of `show_paren_data_function'."
+        case ("show_paren_default_predicate")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_default_predicate()"
+            entry%doc = "The default `show_paren_predicate': true unless the major mode"//LF// &
+                        "derives from `special_mode' (paren.el's (not (derived-mode"//LF// &
+                        ". special-mode)))."
+        case ("show_paren_local_mode")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "call show_paren_local_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle `show_paren_mode' only in this buffer."
+        case ("show_paren_mode")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "call show_paren_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle visualization of matching parens (Show Paren mode)."//LF// &
+                        ""//LF// &
+                        "When enabled, any matching parenthesis is highlighted in `show_paren_style'"//LF// &
+                        "after `show_paren_delay' seconds of Emacs idle time."//LF// &
+                        ""//LF// &
+                        "Also see `show_paren_predicate', which controls which buffers"//LF// &
+                        "this mode is enabled in."//LF// &
+                        ""//LF// &
+                        "This is a global minor mode.  To toggle the mode in a single buffer,"//LF// &
+                        "use `show_paren_local_mode'."
         case ("skip_chars_backward")
             entry%file = "syntax_fm.f90"
             entry%fortran = "skip_chars_backward(string, status, lim)"
@@ -5240,6 +4956,10 @@ contains
                         "You can thus get the full benefit of adaptive filling"//LF// &
                         " (see the variable `adaptive_fill_mode')."//LF// &
                         "Turning on Text mode runs the normal hook `text_mode_hook'."
+        case ("timerp")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "timerp(timer)"
+            entry%doc = "Return true if TIMER is a timer."
         case ("transient_mark_mode")
             entry%file = "simple_modes_fm.f90"
             entry%interactive = .true.
@@ -5686,6 +5406,28 @@ contains
             entry%file = "simple_fm.f90"
             entry%fortran = "auto_fill_mode_hook"
             entry%doc = "Hook run after entering or leaving `auto_fill_mode'."
+        case ("backward_delete_char_untabify_method")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "backward_delete_char_untabify_method"
+            entry%original = "UNTABIFY_METHOD_UNTABIFY"
+            select case (backward_delete_char_untabify_method)
+            case (UNTABIFY_METHOD_NIL)
+                entry%value = "UNTABIFY_METHOD_NIL"
+            case (UNTABIFY_METHOD_UNTABIFY)
+                entry%value = "UNTABIFY_METHOD_UNTABIFY"
+            case (UNTABIFY_METHOD_HUNGRY)
+                entry%value = "UNTABIFY_METHOD_HUNGRY"
+            case (UNTABIFY_METHOD_ALL)
+                entry%value = "UNTABIFY_METHOD_ALL"
+            case default
+                entry%value = repr(backward_delete_char_untabify_method)
+            end select
+            entry%doc = "The method for untabifying when deleting backward."//LF// &
+                        "Can be `UNTABIFY_METHOD_UNTABIFY' -- turn a tab to many spaces, then delete one space;"//LF// &
+                        "       `UNTABIFY_METHOD_HUNGRY' -- delete all whitespace, both tabs and spaces;"//LF// &
+                        "       `UNTABIFY_METHOD_ALL' -- delete all whitespace, including tabs, spaces and newlines"// &
+                        ";"//LF// &
+                        "       `UNTABIFY_METHOD_NIL' -- just delete one character."
         case ("before_change_functions")
             entry%file = "insdel_fm.f90"
             entry%fortran = "before_change_functions"
@@ -5702,6 +5444,78 @@ contains
                         "If an unhandled error happens in running these functions,"//LF// &
                         "the variable's value remains empty.  That prevents the error"//LF// &
                         "from happening repeatedly and making Emacs nonfunctional."
+        case ("blink_matching_delay")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_delay"
+            entry%original = "1.0"
+            entry%value = repr(blink_matching_delay)
+            entry%doc = "Time in seconds to delay after showing a matching paren."
+        case ("blink_matching_paren")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_paren"
+            entry%original = "BLINK_MATCHING_PAREN_T"
+            select case (blink_matching_paren)
+            case (BLINK_MATCHING_PAREN_NIL)
+                entry%value = "BLINK_MATCHING_PAREN_NIL"
+            case (BLINK_MATCHING_PAREN_T)
+                entry%value = "BLINK_MATCHING_PAREN_T"
+            case (BLINK_MATCHING_PAREN_JUMP)
+                entry%value = "BLINK_MATCHING_PAREN_JUMP"
+            case (BLINK_MATCHING_PAREN_JUMP_OFFSCREEN)
+                entry%value = "BLINK_MATCHING_PAREN_JUMP_OFFSCREEN"
+            case default
+                entry%value = repr(blink_matching_paren)
+            end select
+            entry%doc = "True means show matching open-paren when close-paren is inserted."//LF// &
+                        "If this is true, then when you type a closing delimiter, such as a"//LF// &
+                        "closing parenthesis or brace, Emacs briefly indicates the location"//LF// &
+                        "of the matching opening delimiter."//LF// &
+                        ""//LF// &
+                        "The valid values are:"//LF// &
+                        ""//LF// &
+                        "  `BLINK_MATCHING_PAREN_T'               Highlight the matching open-paren if it is visibl"// &
+                        "e"//LF// &
+                        "                                         in the window, otherwise show the text with match"// &
+                        "ing"//LF// &
+                        "                                         open-paren in the echo area.  This is the default"// &
+                        "."//LF// &
+                        "  `BLINK_MATCHING_PAREN_JUMP'            If the matching open-paren is visible in the wind"// &
+                        "ow,"//LF// &
+                        "                                         briefly move cursor to its position; otherwise sh"// &
+                        "ow"//LF// &
+                        "                                         the text with matching open-paren in the echo are"// &
+                        "a."//LF// &
+                        "  `BLINK_MATCHING_PAREN_JUMP_OFFSCREEN'  Briefly move cursor to the matching open-paren"//LF// &
+                        "                                         even if it is not visible in the window."//LF// &
+                        "  `BLINK_MATCHING_PAREN_NIL'             Don't show the matching open-paren."
+        case ("blink_matching_paren_distance")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_paren_distance"
+            entry%original = "100*1024"
+            entry%value = repr(blink_matching_paren_distance)
+            entry%doc = "If not negative, maximum distance to search backwards for matching"//LF// &
+                        "open-paren.  If negative, search stops at the beginning of the"//LF// &
+                        "accessible portion of the buffer."
+        case ("blink_matching_paren_dont_ignore_comments")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_paren_dont_ignore_comments"
+            entry%original = ".false."
+            entry%value = repr(blink_matching_paren_dont_ignore_comments)
+            entry%doc = "If false, `blink_matching_paren' ignores comments."//LF// &
+                        "More precisely, when looking for the matching parenthesis,"//LF// &
+                        "it skips the contents of comments that end before point."
+        case ("blink_matching_paren_on_screen")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "blink_matching_paren_on_screen"
+            entry%original = ".true."
+            entry%value = repr(blink_matching_paren_on_screen)
+            entry%doc = "True means show matching open-paren when it is on screen."//LF// &
+                        "If false, don't show it (but the open-paren can still be shown"//LF// &
+                        "in the echo area when it is off screen)."//LF// &
+                        ""//LF// &
+                        "This variable has no effect if `blink_matching_paren' is"//LF// &
+                        "`BLINK_MATCHING_PAREN_NIL'.  (In that case, the open-paren is never"//LF// &
+                        "shown.)  It is also ignored if `show_paren_mode' is enabled."
         case ("case_fold_search")
             entry%file = "search_fm.f90"
             entry%fortran = "case_fold_search"
@@ -6527,6 +6341,162 @@ contains
             entry%doc = "True if `edit_kbd_macro' should leave 8-bit characters intact."//LF// &
                         "Default false means to write characters above \177 in octal"//LF// &
                         "notation."
+        case ("electric_indent_chars")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "electric_indent_chars"
+            if (allocated(electric_indent_chars)) then
+                entry%value = repr(electric_indent_chars)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Characters that should cause automatic reindentation."
+        case ("electric_indent_functions_without_reindent")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "electric_indent_functions_without_reindent"
+            if (allocated(electric_indent_functions_without_reindent)) then
+                entry%value = repr(electric_indent_functions_without_reindent)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "List of indent functions that can't reindent."//LF// &
+                        "If `indent_line_function' is one of those, then `electric_indent_mode' will"//LF// &
+                        "not try to reindent lines.  It is normally better to make the major"//LF// &
+                        "mode set `electric_indent_inhibit', but this can be used as a workaround."
+        case ("electric_indent_inhibit")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "electric_indent_inhibit"
+            entry%original = ".false."
+            entry%value = repr(electric_indent_inhibit%value)
+            entry%doc = "If true, reindentation is not appropriate for this buffer."//LF// &
+                        "This should be set by major modes such as `python_mode' since"//LF// &
+                        "Python does not lend itself to fully automatic indentation."
+        case ("electric_indent_local_mode_hook")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "electric_indent_local_mode_hook"
+            entry%doc = "Hook run after entering or leaving `electric_indent_local_mode'."
+        case ("electric_indent_mode_hook")
+            entry%file = "electric_fm.f90"
+            entry%fortran = "electric_indent_mode_hook"
+            entry%doc = "Hook run after entering or leaving `electric_indent_mode'."
+        case ("electric_pair_local_mode_hook")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_local_mode_hook"
+            entry%doc = "Hook run after entering or leaving `electric_pair_local_mode'."
+        case ("electric_pair_mode_hook")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_mode_hook"
+            entry%doc = "Hook run after entering or leaving `electric_pair_mode'."
+        case ("electric_pair_open_newline_between_pairs")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_open_newline_between_pairs"
+            entry%original = ".true."
+            entry%value = repr(electric_pair_open_newline_between_pairs)
+            entry%doc = "Whether to insert an extra newline between matching delimiters."//LF// &
+                        "If true, then when an opening delimiter immediately precedes a"//LF// &
+                        "matching closing delimiter and point is between them, typing a newline"//LF// &
+                        "automatically inserts an extra newline after point.  If false, just one"//LF// &
+                        "newline is inserted before point."
+        case ("electric_pair_pairs")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_pairs"
+            entry%doc = "Alist of pairs that should be used regardless of major mode."//LF// &
+                        ""//LF// &
+                        "Pairs of delimiters in this list are a fallback in case they have"//LF// &
+                        "no syntax relevant to `electric_pair_mode' in the mode's syntax"//LF// &
+                        "table."//LF// &
+                        ""//LF// &
+                        "Each list element should be in one of these forms:"//LF// &
+                        " (CHAR . CHAR)"//LF// &
+                        "Where CHAR is character to be used as pair."//LF// &
+                        ""//LF// &
+                        " (STRING STRING SPC)"//LF// &
+                        "Where STRING is a string to be used as pair and SPC a true value"//LF// &
+                        "which specifies to insert an extra space after first STRING."//LF// &
+                        ""//LF// &
+                        " (STRING . STRING)"//LF// &
+                        "This is similar to (STRING STRING SPC) form, except that SPC (space) is"//LF// &
+                        "ignored and will not be inserted."//LF// &
+                        ""//LF// &
+                        "In both string pairs forms, the first string pair must be a regular"//LF// &
+                        "expression."//LF// &
+                        ""//LF// &
+                        "Unlike character pairs, string pairs do not support"//LF// &
+                        "inserting pairs in regions and cannot be deleted with"//LF// &
+                        "`electric_pair_delete_pair', thus string pairs should be used only for"//LF// &
+                        "multi-character pairs."//LF// &
+                        ""//LF// &
+                        "See also the variable `electric_pair_text_pairs'."
+        case ("electric_pair_preserve_balance")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_preserve_balance"
+            entry%original = ".true."
+            entry%value = repr(electric_pair_preserve_balance)
+            entry%doc = "Whether to keep matching delimiters balanced."//LF// &
+                        "When true, typing a delimiter inserts only this character if there is"//LF// &
+                        "a unpaired matching delimiter later (if the latter is a closing"//LF// &
+                        "delimiter) or earlier (if the latter is a opening delimiter) in the"//LF// &
+                        "buffer.  When false, inserting a delimiter disregards unpaired matching"//LF// &
+                        "delimiters."//LF// &
+                        ""//LF// &
+                        "Whether this variable takes effect depends on the variables"//LF// &
+                        "`electric_pair_inhibit_predicate' and `electric_pair_skip_self', which"//LF// &
+                        "check the value of this variable before delegating to other predicates"//LF// &
+                        "responsible for making decisions on whether to pair/skip some characters"//LF// &
+                        "based on the actual state of the buffer's delimiters.  In addition, this"//LF// &
+                        "variable has no effect if there is an active region."
+        case ("electric_pair_skip_whitespace")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_skip_whitespace"
+            entry%original = "ELECTRIC_PAIR_SKIP_WHITESPACE_T"
+            select case (electric_pair_skip_whitespace)
+            case (ELECTRIC_PAIR_SKIP_WHITESPACE_NIL)
+                entry%value = "ELECTRIC_PAIR_SKIP_WHITESPACE_NIL"
+            case (ELECTRIC_PAIR_SKIP_WHITESPACE_T)
+                entry%value = "ELECTRIC_PAIR_SKIP_WHITESPACE_T"
+            case (ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP)
+                entry%value = "ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP"
+            case default
+                entry%value = repr(electric_pair_skip_whitespace)
+            end select
+            entry%doc = "Whether typing a closing delimiter moves point over whitespace."//LF// &
+                        "If `ELECTRIC_PAIR_SKIP_WHITESPACE_T' and point is separated from a"//LF// &
+                        "closing delimiter only by whitespace, then typing a closing delimiter"//LF// &
+                        "of the same type does not insert that character but instead moves"//LF// &
+                        "point to immediately after the already present closing delimiter.  If"//LF// &
+                        "the value of this variable is `ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP',"//LF// &
+                        "then the whitespace moved over is deleted.  If the value is"//LF// &
+                        "`ELECTRIC_PAIR_SKIP_WHITESPACE_NIL', typing a closing delimiter simply"//LF// &
+                        "inserts it at point."//LF// &
+                        ""//LF// &
+                        "The specific kind of whitespace skipped is given by the variable"//LF// &
+                        "`electric_pair_skip_whitespace_chars'."
+        case ("electric_pair_skip_whitespace_chars")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_skip_whitespace_chars"
+            if (allocated(electric_pair_skip_whitespace_chars)) then
+                entry%value = repr(electric_pair_skip_whitespace_chars)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Whitespace characters considered by `electric_pair_skip_whitespace'."
+        case ("electric_pair_text_pairs")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_text_pairs"
+            entry%doc = "Alist of pairs that should always be used in comments and strings."//LF// &
+                        ""//LF// &
+                        "Pairs of delimiters in this list are a fallback in case they have"//LF// &
+                        "no syntax relevant to `electric_pair_mode' in the syntax table"//LF// &
+                        "defined in `electric_pair_text_syntax_table'."//LF// &
+                        ""//LF// &
+                        "The elements have the forms of `electric_pair_pairs'."
+        case ("electric_pair_text_syntax_table")
+            entry%file = "elec_pair_fm.f90"
+            entry%fortran = "electric_pair_text_syntax_table"
+            entry%doc = "Syntax table used when pairing inside comments and strings."//LF// &
+                        ""//LF// &
+                        "`electric_pair_mode' considers this syntax table only when point is"//LF// &
+                        "within text marked as a comment or enclosed within quotes.  If lookup"//LF// &
+                        "fails here, `electric_pair_text_pairs' will be considered."
         case ("enable_recursive_minibuffers")
             entry%file = "minibuf_fm.f90"
             entry%fortran = "enable_recursive_minibuffers"
@@ -7225,6 +7195,12 @@ contains
             entry%original = ".true."
             entry%value = repr(pop_up_windows)
             entry%doc = "True means `display_buffer' should make a new window."
+        case ("post_self_insert_hook")
+            entry%file = "cmds_fm.f90"
+            entry%fortran = "post_self_insert_hook"
+            entry%doc = "Hook run at the end of `self_insert_command'."//LF// &
+                        "This is run after inserting a character."//LF// &
+                        "The hook can access the inserted character via `last_command_event'."
         case ("process_connection_type")
             entry%file = "process_fm.f90"
             entry%fortran = "process_connection_type"
@@ -7677,6 +7653,107 @@ contains
             entry%doc = "File name to load inferior shells from."//LF// &
                         "Initialized from the SHELL environment variable, or to a system-dependent"//LF// &
                         "default if SHELL is unset.  See Info node `(elisp)Security Considerations'."
+        case ("show_paren_context_when_offscreen")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_context_when_offscreen"
+            entry%original = ".false."
+            entry%value = repr(show_paren_context_when_offscreen)
+            entry%doc = "If true, show context around the opening paren if it is offscreen."//LF// &
+                        "The context is usually the line that contains the openparen,"//LF// &
+                        "except if the openparen is on its own line, in which case the"//LF// &
+                        "context includes the previous nonblank line."//LF// &
+                        ""//LF// &
+                        "The context is shown in the echo area."
+        case ("show_paren_delay")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_delay"
+            entry%original = "0.125"
+            entry%value = repr(show_paren_delay)
+            entry%doc = "Time in seconds to delay before showing a matching paren."//LF// &
+                        "If you change this while `show_paren_mode' is active, you must"//LF// &
+                        "toggle the mode off and on again for this to take effect."
+        case ("show_paren_highlight_openparen")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_highlight_openparen"
+            entry%original = ".true."
+            entry%value = repr(show_paren_highlight_openparen)
+            entry%doc = "True turns on openparen highlighting when matching forward."//LF// &
+                        "When false, and point stands just before an open paren, the paren"//LF// &
+                        "is not highlighted, the cursor being regarded as adequate to mark"//LF// &
+                        "its position."
+        case ("show_paren_local_mode_hook")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_local_mode_hook"
+            entry%doc = "Hook run after entering or leaving `show_paren_local_mode'."
+        case ("show_paren_mode_hook")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_mode_hook"
+            entry%doc = "Hook run after entering or leaving `show_paren_mode'."
+        case ("show_paren_not_in_comments_or_strings")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_not_in_comments_or_strings"
+            entry%original = "SHOW_PAREN_COMMENTS_STRINGS_ALWAYS"
+            select case (show_paren_not_in_comments_or_strings)
+            case (SHOW_PAREN_COMMENTS_STRINGS_ALWAYS)
+                entry%value = "SHOW_PAREN_COMMENTS_STRINGS_ALWAYS"
+            case (SHOW_PAREN_COMMENTS_STRINGS_ALL)
+                entry%value = "SHOW_PAREN_COMMENTS_STRINGS_ALL"
+            case (SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH)
+                entry%value = "SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH"
+            case default
+                entry%value = repr(show_paren_not_in_comments_or_strings)
+            end select
+            entry%doc = "If `SHOW_PAREN_COMMENTS_STRINGS_ALL', never highlight parens inside"//LF// &
+                        "comments and strings.  If `SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH',"//LF// &
+                        "do not highlight mismatched parens inside comments and strings.  If"//LF// &
+                        "`SHOW_PAREN_COMMENTS_STRINGS_ALWAYS' (the default), always highlight"//LF// &
+                        "parens wherever they are."
+        case ("show_paren_priority")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_priority"
+            entry%original = "1000"
+            entry%value = repr(show_paren_priority)
+            entry%doc = "Priority of paren highlighting overlays."
+        case ("show_paren_ring_bell_on_mismatch")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_ring_bell_on_mismatch"
+            entry%original = ".false."
+            entry%value = repr(show_paren_ring_bell_on_mismatch)
+            entry%doc = "If true, beep if mismatched paren is detected."
+        case ("show_paren_style")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_style"
+            entry%original = "SHOW_PAREN_PARENTHESIS"
+            select case (show_paren_style)
+            case (SHOW_PAREN_PARENTHESIS)
+                entry%value = "SHOW_PAREN_PARENTHESIS"
+            case (SHOW_PAREN_EXPRESSION)
+                entry%value = "SHOW_PAREN_EXPRESSION"
+            case (SHOW_PAREN_MIXED)
+                entry%value = "SHOW_PAREN_MIXED"
+            case default
+                entry%value = repr(show_paren_style)
+            end select
+            entry%doc = "Style used when showing a matching paren."//LF// &
+                        "Valid styles are `SHOW_PAREN_PARENTHESIS' (meaning show the matching"//LF// &
+                        "paren), `SHOW_PAREN_EXPRESSION' (meaning show the entire expression"//LF// &
+                        "enclosed by the paren) and `SHOW_PAREN_MIXED' (meaning show the"//LF// &
+                        "matching paren if it is visible, and the expression otherwise)."
+        case ("show_paren_when_point_in_periphery")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_when_point_in_periphery"
+            entry%original = ".false."
+            entry%value = repr(show_paren_when_point_in_periphery)
+            entry%doc = "If true, show parens when point is in the line's periphery."//LF// &
+                        "The periphery is at the beginning or end of a line or in any"//LF// &
+                        "whitespace there."
+        case ("show_paren_when_point_inside_paren")
+            entry%file = "paren_fm.f90"
+            entry%fortran = "show_paren_when_point_inside_paren"
+            entry%original = ".false."
+            entry%value = repr(show_paren_when_point_inside_paren)
+            entry%doc = "If true, show parens when point is just inside one."//LF// &
+                        "This will only be done when point isn't also just outside a paren."
         case ("special_mode_hook")
             entry%file = "simple_fm.f90"
             entry%fortran = "special_mode_hook"
@@ -7794,6 +7871,16 @@ contains
             entry%doc = "True if this buffer's major mode is a variant of Text mode."//LF// &
                         "Obsolete since 27.1: don't set it, and instead of testing its value"//LF// &
                         "use `derived_mode_p'."
+        case ("timer_max_repeats")
+            entry%file = "timer_fm.f90"
+            entry%fortran = "timer_max_repeats"
+            entry%original = "10"
+            entry%value = repr(timer_max_repeats)
+            entry%doc = "Maximum number of times to repeat a timer, if many repeats are delayed."//LF// &
+                        "Timer invocations can be delayed because Emacs is suspended or busy,"//LF// &
+                        "or because the system's time changes.  If such an occurrence makes it"//LF// &
+                        "appear that many invocations are overdue, this variable controls"//LF// &
+                        "how many will really happen."
         case ("transient_mark_mode")
             entry%file = "buffer_fm.f90"
             entry%fortran = "transient_mark_mode"
@@ -7988,6 +8075,19 @@ contains
         end do
         s = s//"]"
     end function repr_int64s
+
+    !> An array of default integers as a Fortran array constructor.
+    function repr_integers(v) result(s)
+        integer, intent(in) :: v(:)
+        character(len=:), allocatable :: s
+        integer :: i
+        s = "["
+        do i = 1, size(v)
+            if (i > 1) s = s//", "
+            s = s//repr_integer(v(i))
+        end do
+        s = s//"]"
+    end function repr_integers
 
     !> A string as a Fortran literal.
     function repr_string(v) result(s)

@@ -56,6 +56,13 @@ module eval_fm
     public :: funcall_noargs, kill_local_hooks
     public :: change_function, after_change_function, position_function, region_function, region_entry_type
 
+    !> The value `current_prefix_arg' had where the normal hook whose
+    !> function is running was run.  The functions of a normal hook run
+    !> as functions of no arguments, so they see no prefix argument;
+    !> those that read the dynamic value of current-prefix-arg upstream
+    !> (`post_self_insert_hook' functions) read this.
+    type(value_type), public :: hook_current_prefix_arg
+
     abstract interface
         !> A function of a `change_hook_type' hook such as
         !> `before_change_functions': BEG and END are the bounds of the
@@ -677,13 +684,16 @@ contains
         type(hook_entry_type), intent(in) :: e
         integer(int64), intent(in) :: beg, end, old_len
         type(status_type), intent(out) :: status
-        type(value_type) :: saved
+        type(value_type) :: saved, saved_outer
         status = status_type()
         if (associated(e%fn)) then
             saved = current_prefix_arg
+            saved_outer = hook_current_prefix_arg
+            hook_current_prefix_arg = saved
             current_prefix_arg = nil()
             call e%fn(status)
             current_prefix_arg = saved
+            hook_current_prefix_arg = saved_outer
         else if (associated(e%change_fn)) then
             call e%change_fn(beg, end, status)
         else if (associated(e%after_change_fn)) then

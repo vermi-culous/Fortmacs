@@ -527,20 +527,32 @@ END {
     for (i = 1; i <= nf; i++) if (length(fname[i]) > w) w = length(fname[i])
     printf "    !> The documented functions, sorted.\n"
     printf "    character(len=%d), parameter, public :: function_names(%d) = [character(len=%d) :: &\n", w, nf, w
-    for (i = 1; i <= nf; i++)
-        printf "        %s%s\n", q(fname[i]), (i < nf ? ", &" : "]")
+    # Several names a line, to stay within the 255 continuation lines
+    # of a statement.
+    line = ""
+    for (i = 1; i <= nf; i++) {
+        item = q(fname[i]) (i < nf ? ", " : "]")
+        if (line != "" && length(line) + length(item) > 90) { printf "        %s&\n", line; line = "" }
+        line = line item
+    }
+    printf "        %s\n", line
     print ""
     w = 1
     for (i = 1; i <= nv; i++) if (length(vname[i]) > w) w = length(vname[i])
     printf "    !> The documented variables, sorted.\n"
     printf "    character(len=%d), parameter, public :: variable_names(%d) = [character(len=%d) :: &\n", w, nv, w
-    for (i = 1; i <= nv; i++)
-        printf "        %s%s\n", q(vname[i]), (i < nv ? ", &" : "]")
+    line = ""
+    for (i = 1; i <= nv; i++) {
+        item = q(vname[i]) (i < nv ? ", " : "]")
+        if (line != "" && length(line) + length(item) > 90) { printf "        %s&\n", line; line = "" }
+        line = line item
+    }
+    printf "        %s\n", line
     print ""
     print "    character(len=*), parameter :: LF = achar(10)"
     print ""
     print "    interface repr"
-    print "        module procedure repr_logical, repr_integer, repr_int64, repr_int64s, repr_real, repr_string, repr_strings"
+    print "        module procedure repr_logical, repr_integer, repr_int64, repr_int64s, repr_integers, repr_real, repr_string, repr_strings"
     print "    end interface repr"
     print ""
     print "contains"
@@ -698,6 +710,22 @@ END {
     print ""
     print "        s = s//\"]\""
     print "    end function repr_int64s"
+    print ""
+    print "    !> An array of default integers as a Fortran array constructor."
+    print "    function repr_integers(v) result(s)"
+    print "        integer, intent(in) :: v(:)"
+    print "        character(len=:), allocatable :: s"
+    print "        integer :: i"
+    print ""
+    print "        s = \"[\""
+    print ""
+    print "        do i = 1, size(v)"
+    print "            if (i > 1) s = s//\", \""
+    print "            s = s//repr_integer(v(i))"
+    print "        end do"
+    print ""
+    print "        s = s//\"]\""
+    print "    end function repr_integers"
     print ""
     print "    !> A string as a Fortran literal."
     print "    function repr_string(v) result(s)"

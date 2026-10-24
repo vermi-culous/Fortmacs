@@ -60,6 +60,7 @@ submodule(data_fm) data_buffer_fm
     use syntax_fm, only: parse_sexp_ignore_comments, comment_end_can_be_escaped
     use casefiddle_fm, only: case_symbols_as_words
     use insdel_fm, only: inhibit_modification_hooks
+    use electric_fm, only: electric_indent_inhibit
     use files_fm, only: require_final_newline, mode_require_final_newline, FINAL_NEWLINE_NEVER, &
                         FINAL_NEWLINE_SAVE, FINAL_NEWLINE_VISIT, FINAL_NEWLINE_VISIT_SAVE, FINAL_NEWLINE_ASK
     implicit none(type, external)
@@ -71,7 +72,7 @@ submodule(data_fm) data_buffer_fm
     !> The variables forwarded to Fortran settings; slot variables are
     !> per-buffer fields of buffer_type (always local, like buffer.c's
     !> slots with a local flag of -1).
-    integer, parameter :: NFWD = 27
+    integer, parameter :: NFWD = 28
     character(len=*), parameter :: FWD_NAMES(NFWD) = [character(len=32) :: &
                                                 "fill_column", "left_margin", "tab_width", "indent_tabs_mode", "case_fold_search", &
                                                       "fill_prefix", "paragraph_start", "paragraph_separate", "sentence_end", &
@@ -81,12 +82,14 @@ submodule(data_fm) data_buffer_fm
                                                       "parse_sexp_ignore_comments", "require_final_newline", &
                                                       "mode_require_final_newline", "case_symbols_as_words", &
                                                       "completion_ignore_case", "comment_end_can_be_escaped", &
-                                                      "inhibit_modification_hooks"]
+                                                      "inhibit_modification_hooks", &
+                                                      "electric_indent_inhibit"]
     integer, parameter :: FWD_KIND(NFWD) = [K_INT64, K_INT64, K_INT, K_BOOL, K_BOOL, &
                                             K_STRING, K_STRING, K_STRING, K_STRING, &
                                             K_BOOL, K_BOOL, K_STRING, &
                                             K_INT64, K_AUTO_FILL, K_INDENT_LINE, K_BOOL, &
-                                            K_SLOT, K_SLOT, K_SLOT, K_BOOL, K_BOOL, K_INT, K_INT, K_BOOL, K_BOOL, K_BOOL, K_BOOL]
+                                            K_SLOT, K_SLOT, K_SLOT, K_BOOL, K_BOOL, K_INT, K_INT, K_BOOL, K_BOOL, K_BOOL, K_BOOL, &
+                                            K_BOOL]
     !> DEFVAR_PER_BUFFER, `make_variable_buffer_local' or `:local t':
     !> local when set.
     logical, parameter :: FWD_PER_BUFFER(NFWD) = [.true., .true., .true., .false., .true., &
@@ -94,7 +97,7 @@ submodule(data_fm) data_buffer_fm
                                                   .false., .false., .false., &
                                                   .false., .true., .false., .false., &
                                                   .true., .true., .true., .false., .false., .false., .false., .true., .false., &
-                                                  .true., .false.]
+                                                  .true., .false., .true.]
 
     !> Saved procedure pointers: the default while the current buffer
     !> has a local value, or a buffer's local value while it is not
@@ -144,6 +147,8 @@ contains
         if (i == 0) return
         m => minor_mode_at(i)
         if (len_trim(m%variable) > 0) return
+        ! A mode whose state is an expression has no variable.
+        if (associated(m%getter)) return
         symbols(id)%fwd = NFWD + i
         if (.not. m%global) symbols(id)%local_if_set = .true.
     end subroutine resolve_minor_mode
@@ -327,6 +332,8 @@ contains
             call setting_value(indent_line_function, indent_line_value(indent_line_function%value), v, bound)
         case ("transient_mark_mode")
             call setting_value(transient_mark_mode, bool_value(transient_mark_mode%value), v, bound)
+        case ("electric_indent_inhibit")
+            call setting_value(electric_indent_inhibit, bool_value(electric_indent_inhibit%value), v, bound)
         case ("major_mode")
             if (b > 0 .and. allocated(buffers(b)%major_mode)) then
                 v = sym(buffers(b)%major_mode)
@@ -425,6 +432,8 @@ contains
             call set_indent_line(indent_line_function, v)
         case ("transient_mark_mode")
             call set_logical(transient_mark_mode, v)
+        case ("electric_indent_inhibit")
+            call set_logical(electric_indent_inhibit, v)
         case ("major_mode")
             if (cur == 0) return
             if (.not. symbolp(v)) then
@@ -593,6 +602,8 @@ contains
             indent_line_function%void = .true.
         case ("transient_mark_mode")
             transient_mark_mode%void = .true.
+        case ("electric_indent_inhibit")
+            electric_indent_inhibit%void = .true.
         case ("text_mode_variant")
             text_mode_variant%void = .true.
         case ("parse_sexp_ignore_comments")

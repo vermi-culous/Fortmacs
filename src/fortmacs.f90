@@ -280,6 +280,39 @@ module fortmacs
                          shell_command_switch, shell_command_default_error_buffer, shell_command_prompt_show_cwd, &
                          shell_command_dont_erase_buffer, shell_command_buffer_name, DONT_ERASE_NIL, DONT_ERASE_ERASE, &
                          DONT_ERASE_BEG_LAST_OUT, DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT
+    use cmds_fm, only: post_self_insert_hook
+    use timer_fm, only: run_at_time, run_with_timer, run_with_idle_timer, cancel_timer, free_timer, timerp, &
+                        timer_max_repeats
+    use paren_fm, only: show_paren_mode, show_paren_local_mode, show_paren_style, SHOW_PAREN_PARENTHESIS, &
+                        SHOW_PAREN_EXPRESSION, SHOW_PAREN_MIXED, show_paren_delay, show_paren_priority, &
+                        show_paren_ring_bell_on_mismatch, show_paren_when_point_inside_paren, &
+                        show_paren_when_point_in_periphery, show_paren_highlight_openparen, &
+                        show_paren_context_when_offscreen, show_paren_not_in_comments_or_strings, &
+                        SHOW_PAREN_COMMENTS_STRINGS_ALWAYS, SHOW_PAREN_COMMENTS_STRINGS_ALL, &
+                        SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH, show_paren_data_function, show_paren_data_type, &
+                        show_paren_data_proc, show_paren_default, show_paren_predicate, show_paren_predicate_proc, &
+                        show_paren_default_predicate, show_paren_mode_hook, show_paren_local_mode_hook
+    use simple_fm, only: blink_matching_paren, BLINK_MATCHING_PAREN_NIL, BLINK_MATCHING_PAREN_T, &
+                         BLINK_MATCHING_PAREN_JUMP, BLINK_MATCHING_PAREN_JUMP_OFFSCREEN, blink_matching_paren_on_screen, &
+                         blink_matching_paren_distance, blink_matching_delay, blink_matching_paren_dont_ignore_comments, &
+                         blink_matching_check_function, blink_matching_check_proc, blink_matching_check_mismatch, &
+                         blink_paren_function, blink_matching_open, newline_and_indent, backward_delete_char_untabify, &
+                         backward_delete_char_untabify_method, UNTABIFY_METHOD_NIL, UNTABIFY_METHOD_UNTABIFY, &
+                         UNTABIFY_METHOD_HUNGRY, UNTABIFY_METHOD_ALL
+    use electric_fm, only: electric_indent_mode, electric_indent_local_mode, electric_indent_chars, &
+                           electric_indent_inhibit, electric_indent_functions_without_reindent, &
+                           electric_indent_mode_hook, electric_indent_local_mode_hook, electric_indent_just_newline, &
+                           electric_newline_and_maybe_indent
+    use elec_pair_fm, only: electric_pair_mode, electric_pair_local_mode, electric_pair_type, electric_pair_pairs, &
+                            electric_pair_text_pairs, electric_pair_skip_self, electric_pair_inhibit_predicate, &
+                            electric_pair_char_proc, electric_pair_default_skip_self, electric_pair_default_inhibit, &
+                            electric_pair_conservative_inhibit, electric_pair_preserve_balance, &
+                            electric_pair_open_newline_between_pairs, electric_pair_skip_whitespace, &
+                            ELECTRIC_PAIR_SKIP_WHITESPACE_NIL, ELECTRIC_PAIR_SKIP_WHITESPACE_T, &
+                            ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP, electric_pair_skip_whitespace_chars, &
+                            electric_pair_skip_whitespace_function, electric_pair_text_syntax_table, &
+                            electric_pair_string_bound_function, electric_pair_position_proc, electric_pair_mode_hook, &
+                            electric_pair_local_mode_hook, electric_pair_delete_pair
     implicit none(type, external)
     private
 
@@ -406,6 +439,33 @@ module fortmacs
     public :: kbd_macro_termination_hook, kmacro_ring_max, kmacro_execute_before_append, kmacro_repeat_no_prefix, &
               kmacro_call_repeat_key, kmacro_call_repeat_with_arg, KMACRO_CALL_REPEAT_DISABLED, &
               KMACRO_CALL_REPEAT_LAST_KEY, edmacro_eight_bits
+    public :: post_self_insert_hook, run_at_time, run_with_timer, run_with_idle_timer, cancel_timer, free_timer, &
+              timerp, timer_max_repeats
+    public :: show_paren_mode, show_paren_local_mode, show_paren_style, SHOW_PAREN_PARENTHESIS, SHOW_PAREN_EXPRESSION, &
+              SHOW_PAREN_MIXED, show_paren_delay, show_paren_priority, show_paren_ring_bell_on_mismatch, &
+              show_paren_when_point_inside_paren, show_paren_when_point_in_periphery, show_paren_highlight_openparen, &
+              show_paren_context_when_offscreen, show_paren_not_in_comments_or_strings, &
+              SHOW_PAREN_COMMENTS_STRINGS_ALWAYS, SHOW_PAREN_COMMENTS_STRINGS_ALL, &
+              SHOW_PAREN_COMMENTS_STRINGS_ON_MISMATCH, show_paren_data_function, show_paren_data_type, &
+              show_paren_data_proc, show_paren_default, show_paren_predicate, show_paren_predicate_proc, &
+              show_paren_default_predicate, show_paren_mode_hook, show_paren_local_mode_hook
+    public :: blink_matching_paren, BLINK_MATCHING_PAREN_NIL, BLINK_MATCHING_PAREN_T, BLINK_MATCHING_PAREN_JUMP, &
+              BLINK_MATCHING_PAREN_JUMP_OFFSCREEN, blink_matching_paren_on_screen, blink_matching_paren_distance, &
+              blink_matching_delay, blink_matching_paren_dont_ignore_comments, blink_matching_check_function, &
+              blink_matching_check_proc, blink_matching_check_mismatch, blink_paren_function, blink_matching_open, &
+              newline_and_indent, backward_delete_char_untabify, backward_delete_char_untabify_method, &
+              UNTABIFY_METHOD_NIL, UNTABIFY_METHOD_UNTABIFY, UNTABIFY_METHOD_HUNGRY, UNTABIFY_METHOD_ALL
+    public :: electric_indent_mode, electric_indent_local_mode, electric_indent_chars, electric_indent_inhibit, &
+              electric_indent_functions_without_reindent, electric_indent_mode_hook, electric_indent_local_mode_hook, &
+              electric_indent_just_newline, electric_newline_and_maybe_indent, electric_pair_mode, &
+              electric_pair_local_mode, electric_pair_type, electric_pair_pairs, electric_pair_text_pairs, &
+              electric_pair_skip_self, electric_pair_inhibit_predicate, electric_pair_char_proc, &
+              electric_pair_default_skip_self, electric_pair_default_inhibit, electric_pair_conservative_inhibit, &
+              electric_pair_preserve_balance, electric_pair_open_newline_between_pairs, electric_pair_skip_whitespace, &
+              ELECTRIC_PAIR_SKIP_WHITESPACE_NIL, ELECTRIC_PAIR_SKIP_WHITESPACE_T, ELECTRIC_PAIR_SKIP_WHITESPACE_CHOMP, &
+              electric_pair_skip_whitespace_chars, electric_pair_skip_whitespace_function, &
+              electric_pair_text_syntax_table, electric_pair_string_bound_function, electric_pair_position_proc, &
+              electric_pair_mode_hook, electric_pair_local_mode_hook, electric_pair_delete_pair
     public :: dired, dired_other_window, dired_noselect, dired_mode, dired_mode_map, dired_mode_hook, &
               dired_before_readin_hook, dired_after_readin_hook, dired_initial_position_hook, dired_listing_switches, &
               dired_use_ls_dired, DIRED_USE_LS_DIRED_NIL, DIRED_USE_LS_DIRED_T, DIRED_USE_LS_DIRED_UNSPECIFIED, &

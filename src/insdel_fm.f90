@@ -34,8 +34,9 @@
 !> to their callers say so (`insert_1_both', `del_range_2',
 !> `replace_range_2', `modify_text').
 !>
-!> Deferred until their subsystems exist: overlays (their modification
-!> hooks), text property modification hooks (`modification_hooks',
+!> Overlays move with the text (itree_fm).
+!>
+!> Deferred until their subsystems exist: overlay modification hooks, text property modification hooks (`modification_hooks',
 !> `insert_in_front_hooks', `insert_behind_hooks'),
 !> `combine_after_change_calls', file locking and `select_active_regions'
 !> in `prepare_to_modify_buffer', invalidating the region caches (there
@@ -60,6 +61,7 @@ module insdel_fm
     use data_fm, only: logical_setting
     use eval_fm, only: hook_type, change_hook_type, after_change_hook_type
     use search_fm, only: update_search_regs
+    use itree_fm, only: adjust_overlays_for_insert, adjust_overlays_for_delete
     implicit none(type, external)
     private
 
@@ -395,6 +397,7 @@ contains
                 m = mk%next
             end associate
         end do
+        call adjust_overlays_for_insert(from, to - from, before_markers)
     end subroutine adjust_markers_for_insert
 
     !> Relocate the current buffer's markers for a deletion of
@@ -416,6 +419,7 @@ contains
                 m = mk%next
             end associate
         end do
+        call adjust_overlays_for_delete(from, to - from)
     end subroutine adjust_markers_for_delete
 
     !> Move point by `nchars'/`nbytes'.  Port of insdel.c:adjust_point.
@@ -793,6 +797,8 @@ contains
                 m = mk%next
             end associate
         end do
+        call adjust_overlays_for_insert(from + old_chars, new_chars, .true.)
+        call adjust_overlays_for_delete(from, old_chars)
     end subroutine adjust_markers_for_replace
 
     ! ------------------------------------------------------------------

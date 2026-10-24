@@ -42,7 +42,7 @@ module simple_fm
                         FM_BUFFER_READ_ONLY, FM_TEXT_READ_ONLY, FM_WRONG_TYPE_ARGUMENT
     use handle_fm, only: handle_type
     use lisp_fm, only: value_type, nil, make_fixnum, list, fixnump, consp, &
-                       nilp, xfixnum, list_elt, t_value, make_string, make_list, list_elements
+                       nilp, xfixnum, list_elt, t_value, make_string, make_list, list_elements, command_proc
     use lread_fm, only: sym
     use data_fm, only: value_eq, string_setting, logical_setting, integer_setting
     use character_fm, only: MAX_CHAR, CHAR_META, char_resolve_modifier_mask
@@ -107,6 +107,9 @@ module simple_fm
     public :: fundamental_mode, special_mode, syms_of_simple_modes
     public :: read_shell_command, shell_command, shell_command_on_region, display_message_or_buffer, &
               syms_of_simple_shell
+    public :: blink_matching_open, blink_matching_check_mismatch, blink_paren_open_paren_line_string, &
+              blink_paren_post_self_insert_function, newline_and_indent, syms_of_simple_electric, &
+              backward_delete_char_untabify, blink_matching_check_proc
 
     !> True means show the equivalent keybinding when M-x has one.
     !> (A length of time is not supported, nor the timer: the suggestion
@@ -340,14 +343,21 @@ module simple_fm
         !> If `auto_fill_mode' is enabled, this may cause automatic line
         !> breaking of the preceding line.  A present ARG inhibits this.
         !>
-        !> ARG absent means one newline.  Port of simple.el:newline
-        !> (electric indentation, `use_hard_newlines' and
-        !> `post_self_insert_hook' are not ported).  (In simple_fill_fm,
-        !> for `page_delimiter'.)
-        module subroutine newline(status, arg)
+        !> If `electric_indent_mode' is enabled, this indents the final new line
+        !> that it adds, and reindents the preceding line.  To just insert
+        !> a newline, use \[electric_indent_just_newline].
+        !>
+        !> ARG absent means one newline.  A true INTERACTIVE says the
+        !> function was called interactively: `post_self_insert_hook' runs
+        !> (electric indentation, blinking parens); otherwise only the
+        !> newline and the left margin are done.  Port of simple.el:newline
+        !> (`use_hard_newlines' is not ported).  (In simple_fill_fm, for
+        !> `page_delimiter'.)
+        recursive module subroutine newline(status, arg, interactive)
             implicit none(type, external)
             type(status_type), intent(out) :: status
             integer(int64), intent(in), optional :: arg
+            logical, intent(in), optional :: interactive
         end subroutine newline
 
         !> Insert a newline and leave point before it.
@@ -493,6 +503,86 @@ module simple_fm
         module subroutine syms_of_simple_shell()
             implicit none(type, external)
         end subroutine syms_of_simple_shell
+
+        !> Momentarily highlight the beginning of the sexp before point.
+        !> Port of simple.el:blink-matching-open.  (In simple_electric_fm,
+        !> for paren_fm.)
+        recursive module subroutine blink_matching_open(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine blink_matching_open
+
+        !> Return whether or not START...END are matching parens.
+        !> END is the current point and START is the blink position.
+        !> START might be 0 if no matching starter was found.
+        !> Returns true if we find there is a mismatch.  Port of
+        !> simple.el:blink-matching-check-mismatch.  (In simple_electric_fm.)
+        module logical function blink_matching_check_mismatch(start, end) result(mismatch)
+            implicit none(type, external)
+            integer(int64), intent(in) :: start, end
+        end function blink_matching_check_mismatch
+
+        !> Return the line string that contains the openparen at POS.
+        !> Remove the line string's properties.  Port of
+        !> simple.el:blink-paren-open-paren-line-string
+        !> (`blink_matching_paren_highlight_offscreen' is not ported).  (In
+        !> simple_electric_fm.)
+        module function blink_paren_open_paren_line_string(pos) result(line_string)
+            implicit none(type, external)
+            integer(int64), intent(in) :: pos
+            character(len=:), allocatable :: line_string
+        end function blink_paren_open_paren_line_string
+
+        !> Call `blink_paren_function' after a char with closeparen syntax is
+        !> self-inserted, unless an odd number of quoting characters
+        !> precede it or a keyboard macro is executing.  Port of
+        !> simple.el:blink-paren-post-self-insert-function (no
+        !> `noninteractive': Fortmacs has no batch mode).  (In
+        !> simple_electric_fm.)
+        recursive module subroutine blink_paren_post_self_insert_function(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine blink_paren_post_self_insert_function
+
+        !> Insert a newline, then indent according to major mode.
+        !> Indentation is done using the value of `indent_line_function'.
+        !> In programming language modes, this is the same as TAB.
+        !> In some text modes, where TAB inserts a tab, this command indents to the
+        !> column specified by the function `current_left_margin'.
+        !>
+        !> With ARG, perform this action that many times.  Port of
+        !> simple.el:newline-and-indent.  (In simple_electric_fm.)
+        recursive module subroutine newline_and_indent(status, arg)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+            integer(int64), intent(in), optional :: arg
+        end subroutine newline_and_indent
+
+        !> Register the commands of simple_electric_fm and put
+        !> `blink_paren_post_self_insert_function' on `post_self_insert_hook'
+        !> (as loading simple.el does).
+        module subroutine syms_of_simple_electric()
+            implicit none(type, external)
+        end subroutine syms_of_simple_electric
+
+        !> Delete characters backward, changing tabs into spaces.
+        !> The exact behavior depends on `backward_delete_char_untabify_method'.
+        !>
+        !> Delete ARG chars, and kill (save in kill ring) if KILLP is true.
+        !>
+        !> If Transient Mark mode is enabled, the mark is active, and ARG is 1,
+        !> delete the text in the region and deactivate the mark instead.
+        !> To disable this, set option `delete_active_region' to false.
+        !>
+        !> Interactively, ARG is the prefix arg (default 1)
+        !> and KILLP is true if a prefix arg was specified.  Port of
+        !> simple.el:backward-delete-char-untabify.  (In simple_electric_fm.)
+        recursive module subroutine backward_delete_char_untabify(arg, status, killp)
+            implicit none(type, external)
+            integer(int64), intent(in) :: arg
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: killp
+        end subroutine backward_delete_char_untabify
     end interface
 
     !> Name of the output buffer for shell commands.  Port of simple.el
@@ -575,6 +665,92 @@ module simple_fm
     !> The value 0 disables blinking.  Port of simple.el
     !> copy-region-blink-delay.
     real, public :: copy_region_blink_delay = 1.0
+
+    !> Values of `blink_matching_paren'.
+    integer, parameter, public :: BLINK_MATCHING_PAREN_NIL = 0, BLINK_MATCHING_PAREN_T = 1, &
+                                  BLINK_MATCHING_PAREN_JUMP = 2, BLINK_MATCHING_PAREN_JUMP_OFFSCREEN = 3
+
+    !> True means show matching open-paren when close-paren is inserted.
+    !> If this is true, then when you type a closing delimiter, such as a
+    !> closing parenthesis or brace, Emacs briefly indicates the location
+    !> of the matching opening delimiter.
+    !>
+    !> The valid values are:
+    !>
+    !>   `BLINK_MATCHING_PAREN_T'               Highlight the matching open-paren if it is visible
+    !>                                          in the window, otherwise show the text with matching
+    !>                                          open-paren in the echo area.  This is the default.
+    !>   `BLINK_MATCHING_PAREN_JUMP'            If the matching open-paren is visible in the window,
+    !>                                          briefly move cursor to its position; otherwise show
+    !>                                          the text with matching open-paren in the echo area.
+    !>   `BLINK_MATCHING_PAREN_JUMP_OFFSCREEN'  Briefly move cursor to the matching open-paren
+    !>                                          even if it is not visible in the window.
+    !>   `BLINK_MATCHING_PAREN_NIL'             Don't show the matching open-paren.
+    !>
+    !> Port of simple.el blink-matching-paren.
+    integer, public :: blink_matching_paren = BLINK_MATCHING_PAREN_T
+
+    !> Values of `backward_delete_char_untabify_method'.
+    integer, parameter, public :: UNTABIFY_METHOD_NIL = 0, UNTABIFY_METHOD_UNTABIFY = 1, UNTABIFY_METHOD_HUNGRY = 2, &
+                                  UNTABIFY_METHOD_ALL = 3
+
+    !> The method for untabifying when deleting backward.
+    !> Can be `UNTABIFY_METHOD_UNTABIFY' -- turn a tab to many spaces, then delete one space;
+    !>        `UNTABIFY_METHOD_HUNGRY' -- delete all whitespace, both tabs and spaces;
+    !>        `UNTABIFY_METHOD_ALL' -- delete all whitespace, including tabs, spaces and newlines;
+    !>        `UNTABIFY_METHOD_NIL' -- just delete one character.
+    !> Port of simple.el backward-delete-char-untabify-method.
+    integer, public :: backward_delete_char_untabify_method = UNTABIFY_METHOD_UNTABIFY
+
+    !> True means show matching open-paren when it is on screen.
+    !> If false, don't show it (but the open-paren can still be shown
+    !> in the echo area when it is off screen).
+    !>
+    !> This variable has no effect if `blink_matching_paren' is
+    !> `BLINK_MATCHING_PAREN_NIL'.  (In that case, the open-paren is never
+    !> shown.)  It is also ignored if `show_paren_mode' is enabled.  Port
+    !> of simple.el blink-matching-paren-on-screen.
+    logical, public :: blink_matching_paren_on_screen = .true.
+
+    !> If not negative, maximum distance to search backwards for matching
+    !> open-paren.  If negative, search stops at the beginning of the
+    !> accessible portion of the buffer.  Port of simple.el
+    !> blink-matching-paren-distance (negative for nil).
+    integer(int64), public :: blink_matching_paren_distance = 100*1024
+
+    !> Time in seconds to delay after showing a matching paren.  Port of
+    !> simple.el blink-matching-delay.
+    real, public :: blink_matching_delay = 1.0
+
+    !> If false, `blink_matching_paren' ignores comments.
+    !> More precisely, when looking for the matching parenthesis,
+    !> it skips the contents of comments that end before point.  Port of
+    !> simple.el blink-matching-paren-dont-ignore-comments.
+    logical, public :: blink_matching_paren_dont_ignore_comments = .false.
+
+    abstract interface
+        !> A `blink_matching_check_function': START (0 if none) and END
+        !> are the positions just before the opening token and right
+        !> after the closing one; true if the two do not match.
+        logical function blink_matching_check_proc(start, end)
+            import :: int64
+            implicit none(type, external)
+            integer(int64), intent(in) :: start, end
+        end function blink_matching_check_proc
+    end interface
+
+    !> Function to check parentheses mismatches.
+    !> The function takes two arguments (START and END) where START is the
+    !> position just before the opening token and END is the position right after.
+    !> START can be 0, if it was not found.
+    !> The function should return true if the two tokens do not match.
+    !> Port of simple.el blink-matching-check-function.
+    procedure(blink_matching_check_proc), pointer, public :: blink_matching_check_function => null()
+
+    !> Function called, if set, whenever a close parenthesis is inserted.
+    !> More precisely, a char with closeparen syntax is self-inserted.
+    !> Port of simple.el blink-paren-function.
+    procedure(command_proc), pointer, public :: blink_paren_function => null()
 
     !> Whether the cursor must be blinked after a copy.
     !> When this condition holds, and the copied region fits in the
@@ -706,16 +882,19 @@ contains
     !>
     !> If `auto_fill_mode' is enabled, this may cause automatic line
     !> breaking of the preceding line.  A present ARG inhibits this.
-    !> Port of simple.el:newline (the command, "*P"; electric indentation
-    !> and hard newlines are not ported).
+    !> If `electric_indent_mode' is enabled, this indents the final new line
+    !> that it adds, and reindents the preceding line.  To just insert
+    !> a newline, use \[electric_indent_just_newline].
+    !> Port of simple.el:newline (the command, "*P\np"; hard newlines are
+    !> not ported).
     subroutine cmd_newline(status)
         type(status_type), intent(out) :: status
         call barf_if_buffer_read_only(status)
         if (.not. status%ok()) return
         if (nilp(current_prefix_arg)) then
-            call newline(status)
+            call newline(status, interactive=.true.)
         else
-            call newline(status, arg_p())
+            call newline(status, arg_p(), interactive=.true.)
         end if
     end subroutine cmd_newline
 
@@ -1859,6 +2038,7 @@ contains
         call syms_of_simple_fill()
         call syms_of_simple_modes()
         call syms_of_simple_shell()
+        call syms_of_simple_electric()
         cycle_spacing_actions = [cycle_spacing_action_type(CYCLE_JUST_ONE_SPACE), &
                                  cycle_spacing_action_type(CYCLE_DELETE_ALL_SPACE), &
                                  cycle_spacing_action_type(CYCLE_RESTORE)]

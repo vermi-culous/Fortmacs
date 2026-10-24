@@ -38,6 +38,7 @@ module commands_fm
         type(command_type) :: auto_fill_mode
         type(command_type) :: back_to_indentation
         type(command_type) :: backward_char
+        type(command_type) :: backward_delete_char_untabify
         type(command_type) :: backward_kill_paragraph
         type(command_type) :: backward_kill_sentence
         type(command_type) :: backward_kill_sexp
@@ -51,6 +52,7 @@ module commands_fm
         type(command_type) :: beginning_of_buffer
         type(command_type) :: beginning_of_line
         type(command_type) :: beginning_of_line_text
+        type(command_type) :: blink_matching_open
         type(command_type) :: buffer_to_register
         type(command_type) :: bury_buffer
         type(command_type) :: call_last_kbd_macro
@@ -133,6 +135,13 @@ module commands_fm
         type(command_type) :: down_list
         type(command_type) :: downcase_region
         type(command_type) :: downcase_word
+        type(command_type) :: electric_indent_just_newline
+        type(command_type) :: electric_indent_local_mode
+        type(command_type) :: electric_indent_mode
+        type(command_type) :: electric_newline_and_maybe_indent
+        type(command_type) :: electric_pair_delete_pair
+        type(command_type) :: electric_pair_local_mode
+        type(command_type) :: electric_pair_mode
         type(command_type) :: enable_command
         type(command_type) :: end_kbd_macro
         type(command_type) :: end_of_buffer
@@ -279,6 +288,7 @@ module commands_fm
         type(command_type) :: move_to_window_line_top_bottom
         type(command_type) :: negative_argument
         type(command_type) :: newline
+        type(command_type) :: newline_and_indent
         type(command_type) :: next_buffer
         type(command_type) :: next_history_element
         type(command_type) :: next_line
@@ -331,6 +341,8 @@ module commands_fm
         type(command_type) :: set_mark_command
         type(command_type) :: shell_command
         type(command_type) :: shell_command_on_region
+        type(command_type) :: show_paren_local_mode
+        type(command_type) :: show_paren_mode
         type(command_type) :: special_mode
         type(command_type) :: split_window_below
         type(command_type) :: split_window_right
@@ -378,13 +390,14 @@ module commands_fm
     type(command_table_type), target :: commands
 
     !> The names of the built-in commands.
-    character(len=*), parameter :: BUILTIN_COMMAND_NAMES(340) = [character(len=38) :: &
+    character(len=*), parameter :: BUILTIN_COMMAND_NAMES(352) = [character(len=38) :: &
                                                                  "abort_minibuffers", &
                                                                  "abort_recursive_edit", &
                                                                  "append_to_register", &
                                                                  "auto_fill_mode", &
                                                                  "back_to_indentation", &
                                                                  "backward_char", &
+                                                                 "backward_delete_char_untabify", &
                                                                  "backward_kill_paragraph", &
                                                                  "backward_kill_sentence", &
                                                                  "backward_kill_sexp", &
@@ -398,6 +411,7 @@ module commands_fm
                                                                  "beginning_of_buffer", &
                                                                  "beginning_of_line", &
                                                                  "beginning_of_line_text", &
+                                                                 "blink_matching_open", &
                                                                  "buffer_to_register", &
                                                                  "bury_buffer", &
                                                                  "call_last_kbd_macro", &
@@ -480,6 +494,13 @@ module commands_fm
                                                                  "down_list", &
                                                                  "downcase_region", &
                                                                  "downcase_word", &
+                                                                 "electric_indent_just_newline", &
+                                                                 "electric_indent_local_mode", &
+                                                                 "electric_indent_mode", &
+                                                                 "electric_newline_and_maybe_indent", &
+                                                                 "electric_pair_delete_pair", &
+                                                                 "electric_pair_local_mode", &
+                                                                 "electric_pair_mode", &
                                                                  "enable_command", &
                                                                  "end_kbd_macro", &
                                                                  "end_of_buffer", &
@@ -626,6 +647,7 @@ module commands_fm
                                                                  "move_to_window_line_top_bottom", &
                                                                  "negative_argument", &
                                                                  "newline", &
+                                                                 "newline_and_indent", &
                                                                  "next_buffer", &
                                                                  "next_history_element", &
                                                                  "next_line", &
@@ -678,6 +700,8 @@ module commands_fm
                                                                  "set_mark_command", &
                                                                  "shell_command", &
                                                                  "shell_command_on_region", &
+                                                                 "show_paren_local_mode", &
+                                                                 "show_paren_mode", &
                                                                  "special_mode", &
                                                                  "split_window_below", &
                                                                  "split_window_right", &
@@ -741,6 +765,8 @@ contains
             p => commands%back_to_indentation
         case ("backward_char")
             p => commands%backward_char
+        case ("backward_delete_char_untabify")
+            p => commands%backward_delete_char_untabify
         case ("backward_kill_paragraph")
             p => commands%backward_kill_paragraph
         case ("backward_kill_sentence")
@@ -767,6 +793,8 @@ contains
             p => commands%beginning_of_line
         case ("beginning_of_line_text")
             p => commands%beginning_of_line_text
+        case ("blink_matching_open")
+            p => commands%blink_matching_open
         case ("buffer_to_register")
             p => commands%buffer_to_register
         case ("bury_buffer")
@@ -931,6 +959,20 @@ contains
             p => commands%downcase_region
         case ("downcase_word")
             p => commands%downcase_word
+        case ("electric_indent_just_newline")
+            p => commands%electric_indent_just_newline
+        case ("electric_indent_local_mode")
+            p => commands%electric_indent_local_mode
+        case ("electric_indent_mode")
+            p => commands%electric_indent_mode
+        case ("electric_newline_and_maybe_indent")
+            p => commands%electric_newline_and_maybe_indent
+        case ("electric_pair_delete_pair")
+            p => commands%electric_pair_delete_pair
+        case ("electric_pair_local_mode")
+            p => commands%electric_pair_local_mode
+        case ("electric_pair_mode")
+            p => commands%electric_pair_mode
         case ("enable_command")
             p => commands%enable_command
         case ("end_kbd_macro")
@@ -1223,6 +1265,8 @@ contains
             p => commands%negative_argument
         case ("newline")
             p => commands%newline
+        case ("newline_and_indent")
+            p => commands%newline_and_indent
         case ("next_buffer")
             p => commands%next_buffer
         case ("next_history_element")
@@ -1327,6 +1371,10 @@ contains
             p => commands%shell_command
         case ("shell_command_on_region")
             p => commands%shell_command_on_region
+        case ("show_paren_local_mode")
+            p => commands%show_paren_local_mode
+        case ("show_paren_mode")
+            p => commands%show_paren_mode
         case ("special_mode")
             p => commands%special_mode
         case ("split_window_below")

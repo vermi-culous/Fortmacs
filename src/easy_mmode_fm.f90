@@ -34,10 +34,11 @@ module easy_mmode_fm
     use handle_fm, only: handle_type
     use lisp_fm, only: value_type, nil, nilp, t_value, make_keymap_ref, symbols
     use lread_fm, only: sym, intern
-    use data_fm, only: set, set_default, symbol_value, make_variable_buffer_local, buffer_local_value, logical_setting
+    use data_fm, only: set, set_default, symbol_value, make_variable_buffer_local, buffer_local_value, logical_setting, &
+                       default_value
     use eval_fm, only: hook_type
     use callint_fm, only: current_prefix_arg, prefix_numeric_value
-    use buffer_fm, only: buffers, cur
+    use buffer_fm, only: buffers, cur, set_buffer_internal
     use keymap_fm, only: make_sparse_keymap, keymap_live_p, add_minor_mode_map
     use keyboard_fm, only: last_message
     use xdisp_fm, only: message, add_minor_mode_lighter
@@ -45,7 +46,8 @@ module easy_mmode_fm
     implicit none(type, external)
     private
 
-    public :: minor_mode_body_proc, easy_mmode_pretty_mode_name, minor_mode_named, minor_mode_index, minor_mode_at
+    public :: minor_mode_body_proc, minor_mode_getter_proc, easy_mmode_pretty_mode_name, minor_mode_named, minor_mode_index, &
+              minor_mode_at
 
     abstract interface
         !> The body of a minor mode, run after its state is set: `enable'
@@ -57,6 +59,13 @@ module easy_mmode_fm
             logical, intent(in) :: enable
             type(status_type), intent(out) :: status
         end subroutine minor_mode_body_proc
+
+        !> The state of a minor mode whose state is an expression (upstream's
+        !> :variable (GETTER . SETTER)): whether it is on in the current
+        !> buffer.
+        logical function minor_mode_getter_proc()
+            implicit none(type, external)
+        end function minor_mode_getter_proc
     end interface
 
     !> A minor mode.  Port of what easy-mmode.el:define-minor-mode
@@ -74,6 +83,9 @@ module easy_mmode_fm
         !> Run every time the mode is turned on or off, after the state
         !> is set.
         procedure(minor_mode_body_proc), pointer, nopass :: body => null()
+        !> The mode's state when it is an expression (upstream's :variable
+        !> (GETTER . SETTER), the body being the setter); null otherwise.
+        procedure(minor_mode_getter_proc), pointer, nopass :: getter => null()
         !> Run after the mode's hooks and message (upstream's :after-hook);
         !> while mode hooks are delayed, after the delayed mode hooks.
         procedure(after_hook_proc), pointer, nopass :: after_hook => null()
@@ -269,14 +281,16 @@ contains
     !> while the mode is on.  BODY, if present, runs every time the mode
     !> is turned on or off.  KEYMAP true makes the mode's keymap
     !> (`MODE-map', upstream's :keymap), active while the mode is on.
-    !> Port of easy-mmode.el:define-minor-mode.
-    subroutine minor_mode_define(self, name, lighter, global, variable, body, hook, keymap, after_hook)
+    !> GETTER, if present, gives the state (upstream's :variable (GETTER
+    !> . SETTER), BODY setting it).  Port of easy-mmode.el:define-minor-mode.
+    subroutine minor_mode_define(self, name, lighter, global, variable, body, hook, keymap, after_hook, getter)
         class(minor_mode_type), intent(inout), target :: self
         character(len=*), intent(in) :: name
         character(len=*), intent(in), optional :: lighter, variable
         logical, intent(in), optional :: global
         procedure(minor_mode_body_proc), optional :: body
         procedure(after_hook_proc), optional :: after_hook
+        procedure(minor_mode_getter_proc), optional :: getter
         type(hook_type), intent(inout), target, optional :: hook
         logical, intent(in), optional :: keymap
         type(minor_mode_ref_type), allocatable :: grown(:)
@@ -293,6 +307,8 @@ contains
         if (present(body)) self%body => body
         self%after_hook => null()
         if (present(after_hook)) self%after_hook => after_hook
+        self%getter => null()
+        if (present(getter)) self%getter => getter
         self%hook => null()
         if (present(hook)) then
             self%hook => hook
@@ -347,7 +363,9 @@ contains
         type(value_type) :: v
         type(status_type) :: st
         on = .false.
-        if (len_trim(self%variable) == 0 .and. self%global) then
+        if (associated(self%getter)) then
+            on = getter_in(self, b)
+        else if (len_trim(self%variable) == 0 .and. self%global) then
             on = self%state%value
         else if (b > 0) then
             call buffer_local_value(sym(state_name(self)), b, v, st)
@@ -359,21 +377,46 @@ contains
         class(minor_mode_type), intent(in) :: self
         type(value_type) :: v
         type(status_type) :: st
-        if (len_trim(self%variable) > 0) then
+        if (associated(self%getter)) then
+            on = self%getter()
+        else if (len_trim(self%variable) > 0) then
             call symbol_value(sym(trim(self%variable)), v, st)
+            on = st%ok() .and. .not. nilp(v)
+        else if (self%global .and. self%state%local_p()) then
+            ! A global mode's state is its default value.
+            call default_value(sym(trim(self%name)), v, st)
             on = st%ok() .and. .not. nilp(v)
         else
             on = self%state%value
         end if
     end function minor_mode_enabled
 
+    !> The GETTER of SELF in buffer slot B.
+    logical function getter_in(self, b) result(on)
+        class(minor_mode_type), intent(in) :: self
+        integer(int64), intent(in) :: b
+        integer(int64) :: saved
+        on = .false.
+        if (b <= 0) return
+        saved = cur
+        call set_buffer_internal(b)
+        on = self%getter()
+        if (saved > 0) call set_buffer_internal(saved)
+    end function getter_in
+
     !> Set the mode's own state: globally, or (a buffer-local mode) in
     !> the current buffer, as `(setq MODE ON)' does.
     subroutine minor_mode_set_state(self, on)
         class(minor_mode_type), intent(inout) :: self
         logical, intent(in) :: on
+        type(status_type) :: st
         if (self%global) then
-            self%state = on
+            ! (setq-default MODE ON)
+            if (self%state%local_p()) then
+                call set_default(sym(trim(self%name)), bool(on), st)
+            else
+                self%state = on
+            end if
         else
             call self%state%set_local(on)
         end if
@@ -392,7 +435,10 @@ contains
         status = status_type()
         had_message = allocated(last_message)
         if (had_message) before = last_message
-        if (len_trim(self%variable) > 0) then
+        if (associated(self%getter)) then
+            ! The state is an expression: the body is its setter.
+            continue
+        else if (len_trim(self%variable) > 0) then
             ! The state is a variable of its own; a mode with a body sets
             ! it there (:variable with a setter).
             if (.not. associated(self%body)) then

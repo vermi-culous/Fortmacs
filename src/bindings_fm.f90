@@ -74,6 +74,10 @@ module bindings_fm
     use compile_fm, only: syms_of_compile, compilation_mode_map
     use rect_fm, only: syms_of_rect
     use register_fm, only: syms_of_register
+    use paren_fm, only: syms_of_paren
+    use electric_fm, only: syms_of_electric
+    use elec_pair_fm, only: syms_of_elec_pair
+    use modes_fm, only: minor_modes
     implicit none(type, external)
     private
 
@@ -500,5 +504,13 @@ contains
             call make_sparse_keymap(local_function_key_map)
         end if
         call set_keymap_parent(local_function_key_map, function_key_map, status)
+        ! paren.el, electric.el and elec-pair.el; Show Paren mode and
+        ! Electric Indent mode are on (their :init-value, set after the
+        ! files load at startup).
+        call syms_of_paren()
+        call syms_of_electric(global_map)
+        call syms_of_elec_pair()
+        call minor_modes%show_paren_mode%enable(status)
+        call minor_modes%electric_indent_mode%enable(status)
     end subroutine init_bindings
 end module bindings_fm

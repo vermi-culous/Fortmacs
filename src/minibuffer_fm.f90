@@ -31,7 +31,7 @@
 !> M-RET, mouse), `completion_at_point' in buffers, `completion_show_help',
 !> and completion of environment variables and ~USER in file names.
 module minibuffer_fm
-    use, intrinsic :: iso_fortran_env, only: int32, int64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use commands_fm, only: commands
     use error_fm, only: format_message, status_type, set_error, FM_GENERIC_ERROR, FM_USER_ERROR
     use handle_fm, only: handle_type, null_handle
@@ -60,7 +60,8 @@ module minibuffer_fm
     use dired_fm, only: file_name_completion, file_name_all_completions
     use lread_fm, only: sym
     use keyboard_fm, only: throw_exit, command_loop_level, this_command, last_command, minibuffer_message_text, &
-                           run_at_time, cancel_timer, minibuffer_message_timeout
+                           minibuffer_message_timeout
+    use timer_fm, only: run_at_time, free_timer, timerp
     use minibuf_fm, only: minibufferp, minibuf_level, minibuffer_prompt_end, abort_minibuffers, &
                           minibuffer_innermost_command_loop_p, innermost_minibuffer_p, &
                           minibuffer_local_map, read_from_minibuffer, completion_table_type, &
@@ -142,6 +143,10 @@ module minibuffer_fm
     !> The last text `minibuffer_message' showed (not cleared by the next
     !> command, unlike the display), for programs and tests.
     character(len=:), allocatable, public :: last_minibuffer_message
+
+    !> The timer that removes the text `minibuffer_message' shows.  Port
+    !> of minibuffer.el minibuffer--message-timer.
+    type(handle_type) :: minibuffer_message_timer
 
     !> Maximum height for *Completions* buffer window (0 for no maximum).
     !> Port of minibuffer.el completions-max-height.
@@ -886,6 +891,7 @@ contains
     subroutine minibuffer_message(msg)
         character(len=*), intent(in) :: msg
         integer :: k
+        type(status_type) :: st
         if (.not. minibufferp()) then
             call message(msg)
             return
@@ -900,15 +906,23 @@ contains
             if (msg(k:k) == "[" .and. msg(len(msg):) == "]" .and. len(msg) - k >= 2) minibuffer_message_text = msg
         end if
         last_minibuffer_message = minibuffer_message_text
-        call run_at_time(int(minibuffer_message_timeout*1000, int32), delete_message_overlay)
+        call run_at_time(minibuffer_message_timer, real(minibuffer_message_timeout, real64), &
+                         delete_message_overlay_timer, st)
     end subroutine minibuffer_message
 
     !> Remove the text `minibuffer_message' shows.  Port of
     !> minibuffer.el:minibuffer--delete-message-overlay.
     subroutine delete_message_overlay()
+        if (timerp(minibuffer_message_timer)) call free_timer(minibuffer_message_timer)
         if (allocated(minibuffer_message_text)) deallocate (minibuffer_message_text)
-        call cancel_timer()
     end subroutine delete_message_overlay
+
+    !> `delete_message_overlay' as a timer function.
+    subroutine delete_message_overlay_timer(status)
+        type(status_type), intent(out) :: status
+        status = status_type()
+        call delete_message_overlay()
+    end subroutine delete_message_overlay_timer
 
     !> Port of minibuffer.el:completion--message.
     subroutine completion_message(msg)

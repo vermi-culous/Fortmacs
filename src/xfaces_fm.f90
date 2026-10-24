@@ -34,8 +34,10 @@
 !> (`:foreground', `:inverse_video', `:strike_through'), or lists of
 !> face references, the first taking precedence.
 !>
-!> Deferred: overlays (the active region stands in for redisplay's
-!> region overlay), `face_remapping_alist', mouse faces, face filters
+!> Overlays' `face' properties are merged (the active region stands in for
+!> redisplay's region overlay).
+!>
+!> Deferred: `face_remapping_alist', mouse faces, face filters
 !> (`:filter'), the cons forms (FOREGROUND-COLOR . COLOR) of face
 !> references (no dotted pairs), the `reset' attribute value, relative
 !> (float) and functional heights in face references, fonts, fontsets,
@@ -67,6 +69,9 @@ module xfaces_fm
                              tty_defined_color_count, clear_face_cache_hook
     use buffer_fm, only: buffers, cur, set_buffer_internal
     use textprop_fm, only: get_text_property, next_single_property_change
+    use handle_fm, only: handle_type
+    use itree_fm, only: overlays_at, sort_overlays, overlay_get, overlay_end, overlay_start, overlay_priority, &
+                        compare_overlays
     implicit none(type, external)
     private
 
@@ -981,10 +986,13 @@ contains
     !> F, and in ENDPOS the next position (at most LIMIT and the end of the
     !> accessible text) where a different face may be needed: the default
     !> face with the `face' text property at POS merged in, then the
-    !> `region' face if POS is in [REGION_START, REGION_END) (the region
-    !> overlay redisplay makes for an active region).  With EXTEND_ONLY,
-    !> only faces that set `extend' are merged (for filling the rest of a
-    !> line).  Port of xfaces.c:face_at_buffer_position.
+    !> `face' properties of the overlays at POS in order of increasing
+    !> priority, among them the `region' face if POS is in
+    !> [REGION_START, REGION_END) (the region overlay redisplay makes for
+    !> an active region, of priority (nil . 100)).  With EXTEND_ONLY, only
+    !> faces that set `extend' are merged (for filling the rest of a
+    !> line).  Port of xfaces.c:face_at_buffer_position (overlays' `window'
+    !> properties are not ported; no mouse faces).
     integer(int32) function face_at_buffer_position(f, bi, pos, endpos, limit, region_start, region_end, &
                                                     extend_only) result(id)
         type(frame_type), intent(inout) :: f
@@ -995,8 +1003,10 @@ contains
         type(face_attributes_type) :: attrs
         type(value_type) :: prop
         type(status_type) :: status
-        integer(int64) :: saved, end
-        logical :: found, filter, in_region, ok
+        type(handle_type), allocatable :: overlay_vec(:)
+        integer(int64) :: saved, end, next_overlay, oendpos, rbeg, rend, p, s
+        integer :: i
+        logical :: found, filter, in_region, ok, region_merged
         filter = .false.
         if (present(extend_only)) filter = extend_only
         if (.not. allocated(f%faces)) call realize_basic_faces(f)
@@ -1008,31 +1018,63 @@ contains
         call get_text_property(pos, sym("face"), prop, status)
         call next_single_property_change(pos, sym("face"), end, found, status, min(limit, endpos))
         if (found) endpos = end
-        if (saved /= 0) call set_buffer_internal(saved)
+        ! Look at properties from overlays.
+        call overlays_at(pos, overlay_vec, next=next_overlay)
+        ! overlays_at can return next_overlay beyond the end of the current
+        ! narrowing.  We don't want that to leak into the display code.
+        if (next_overlay > buffers(bi)%zv) next_overlay = buffers(bi)%zv
+        if (next_overlay < endpos) endpos = next_overlay
         ! The region overlay.
         in_region = .false.
+        rbeg = 0
+        rend = 0
         if (present(region_start) .and. present(region_end)) then
             if (region_start < region_end) then
                 if (pos < region_start) then
                     endpos = min(endpos, region_start)
                 else if (pos < region_end) then
                     in_region = .true.
-                    endpos = min(endpos, region_end)
+                    rbeg = region_start
+                    rend = region_end
                 end if
             end if
         end if
         id = DEFAULT_FACE_ID
         ! Optimize common cases where we can use the default face.
-        if (.not. in_region .and. nilp(prop)) return
+        if (.not. in_region .and. size(overlay_vec) == 0 .and. nilp(prop)) then
+            if (saved /= 0) call set_buffer_internal(saved)
+            return
+        end if
         ! Begin with attributes from the default face.
         attrs = f%faces(DEFAULT_FACE_ID)%lface
         ! Merge in attributes specified via text properties.
         if (.not. nilp(prop)) call merge_face_ref(prop, attrs, ok, filter)
         ! Now merge the overlay data.
-        if (in_region) call merge_named_face("region", attrs, 1, filter, ok)
+        call sort_overlays(overlay_vec)
+        region_merged = .not. in_region
+        do i = 1, size(overlay_vec)
+            if (.not. region_merged) then
+                call overlay_priority(overlay_vec(i), p, s)
+                if (compare_overlays(0_int64, 100_int64, rbeg, rend, 0_int64, p, s, overlay_start(overlay_vec(i)), &
+                                     overlay_end(overlay_vec(i)), overlay_vec(i)%index) < 0) call merge_region()
+            end if
+            prop = overlay_get(overlay_vec(i), "face")
+            if (.not. nilp(prop)) call merge_face_ref(prop, attrs, ok, filter)
+            oendpos = overlay_end(overlay_vec(i))
+            if (oendpos < endpos) endpos = oendpos
+        end do
+        if (.not. region_merged) call merge_region()
+        if (saved /= 0) call set_buffer_internal(saved)
         ! Look up a realized face with the given face attributes, or
         ! realize a new one.
         id = lookup_face(f, attrs)
+    contains
+        !> Merge the region overlay's face.
+        subroutine merge_region()
+            call merge_named_face("region", attrs, 1, filter, ok)
+            endpos = min(endpos, rend)
+            region_merged = .true.
+        end subroutine merge_region
     end function face_at_buffer_position
 
     ! ------------------------------------------------------------------
