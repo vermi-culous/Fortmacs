@@ -74,6 +74,8 @@ module bindings_fm
     use compile_fm, only: syms_of_compile, compilation_mode_map
     use rect_fm, only: syms_of_rect
     use register_fm, only: syms_of_register
+    use abbrev_fm, only: syms_of_abbrev, edit_abbrevs_mode_map
+    use dabbrev_fm, only: syms_of_dabbrev
     implicit none(type, external)
     private
 
@@ -88,6 +90,9 @@ module bindings_fm
     !> subr.el:ctl-x-4-map (keymap for subcommands of `C-x 4').
     type(handle_type), public :: global_map, esc_map, ctl_x_map, &
                                  function_key_map, ctl_x_x_map, ctl_x_r_map, ctl_x_4_map
+
+    !> bindings.el:abbrev-map (keymap for abbrev commands).
+    type(handle_type), public :: abbrev_map
 
 contains
 
@@ -196,6 +201,9 @@ contains
         if (keymap_live_p(ctl_x_4_map)) call free_keymap(ctl_x_4_map, status)
         if (keymap_live_p(ctl_x_r_map)) call free_keymap(ctl_x_r_map, status)
         if (keymap_live_p(function_key_map)) call free_keymap(function_key_map, status)
+        if (keymap_live_p(abbrev_map)) call free_keymap(abbrev_map, status)
+        ! First: bindings.el's minor-mode-alist starts with abbrev-mode.
+        call syms_of_abbrev()
         call syms_of_cmds()
         call syms_of_simple()
         call syms_of_window()
@@ -223,6 +231,7 @@ contains
         call syms_of_register()
         call syms_of_macros()
         call syms_of_kmacro()
+        call syms_of_dabbrev()
         ! subr.el: esc-map, ctl-x-map, global-map.
         call make_keymap(esc_map)
         call make_keymap(ctl_x_map)
@@ -343,6 +352,23 @@ contains
         call bind(global_map, "<f4>", "kmacro_end_or_call_macro")
         key(1) = make_fixnum(11_int64)
         call define_key(ctl_x_map, key, make_keymap_ref(kmacro_keymap), status)
+        ! bindings.el: abbrev-map, and the abbrev keys.
+        call make_sparse_keymap(abbrev_map)
+        call bind(abbrev_map, "l", "add_mode_abbrev")
+        call bind(abbrev_map, "C-a", "add_mode_abbrev")
+        call bind(abbrev_map, "g", "add_global_abbrev")
+        call bind(abbrev_map, "+", "add_mode_abbrev")
+        call bind(abbrev_map, "i g", "inverse_add_global_abbrev")
+        call bind(abbrev_map, "i l", "inverse_add_mode_abbrev")
+        call bind(abbrev_map, "-", "inverse_add_global_abbrev")
+        call bind(abbrev_map, "e", "expand_abbrev")
+        call bind(abbrev_map, "'", "expand_abbrev")
+        key(1) = make_fixnum(int(iachar("a"), int64))
+        call define_key(ctl_x_map, key, make_keymap_ref(abbrev_map), status)
+        call bind(esc_map, "'", "abbrev_prefix_mark")
+        call bind(ctl_x_map, "'", "expand_abbrev")
+        ! dabbrev.el (autoloads; dabbrev_completion is not ported).
+        call bind(esc_map, "/", "dabbrev_expand")
         call bind(global_map, "C-?", "undo_redo")
         call bind(global_map, "C-M-_", "undo_redo")
         ! The mark and killing (bindings.el).
@@ -480,6 +506,8 @@ contains
         call register_keymap_name("ctl_x_4_map", ctl_x_4_map)
         call register_keymap_name("dired_mode_map", dired_mode_map)
         call register_keymap_name("ctl_x_r_map", ctl_x_r_map)
+        call register_keymap_name("abbrev_map", abbrev_map)
+        call register_keymap_name("edit_abbrevs_mode_map", edit_abbrevs_mode_map)
         call register_keymap_name("kmacro_keymap", kmacro_keymap)
         call register_keymap_name("isearch_mode_map", isearch_mode_map)
         call register_keymap_name("text_mode_map", text_mode_map)

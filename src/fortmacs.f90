@@ -275,6 +275,34 @@ module fortmacs
                           COMPILATION_SCROLL_NIL, COMPILATION_SCROLL_T, COMPILATION_SCROLL_FIRST_ERROR, &
                           compilation_filter_hook, compilation_filter_start, compilation_mode_hook, &
                           compilation_mode_map, compilation_directory, comint_inhibit_carriage_motion
+    ! Abbrevs and dynamic abbrevs.
+    use abbrev_fm, only: abbrev_table_type, abbrev_type, abbrev_ref_type, abbrev_table_ref_type, abbrev_hook_proc, &
+                         abbrev_enable_proc, abbrev_expand_proc, global_abbrev_table, fundamental_mode_abbrev_table, &
+                         abbrev_table_name_list, abbrev_mode, only_global_abbrevs, abbrev_all_caps, abbrev_file_name, &
+                         abbrevs_changed, abbrev_start_location, last_abbrev, last_abbrev_text, last_abbrev_location, &
+                         abbrev_expand_function, save_abbrevs, SAVE_ABBREVS_NEVER, SAVE_ABBREVS_ASK, &
+                         SAVE_ABBREVS_SILENTLY, edit_abbrevs_mode_hook, edit_abbrevs_mode_map, &
+                         edit_abbrevs_mode_abbrev_table, kill_all_abbrevs, copy_abbrev_table, insert_abbrevs, &
+                         list_abbrevs, abbrev_table_name, edit_abbrevs, write_abbrev_file, inverse_add_mode_abbrev, &
+                         inverse_add_global_abbrev, inverse_add_abbrev, abbrev_prefix_mark, expand_region_abbrevs, &
+                         define_global_abbrev, define_mode_abbrev, abbrev_symbol, abbrev_expansion, abbrev_insert, &
+                         expand_abbrev, abbrev_default_expand, unexpand_abbrev, insert_abbrev_table_description, &
+                         local_abbrev_table, set_local_abbrev_table
+    use text_mode_fm, only: text_mode_abbrev_table
+    use prog_mode_fm, only: prog_mode_abbrev_table
+    use simple_fm, only: special_mode_abbrev_table
+    use help_mode_fm, only: help_mode_abbrev_table
+    use files_fm, only: save_some_buffers_proc, save_some_buffers_function_type, save_some_buffers_functions, &
+                        add_save_some_buffers_function
+    use dabbrev_fm, only: dabbrev_expand, dabbrev_same_major_mode_p, dabbrev_select_buffers, dabbrev_friend_buffer_proc, &
+                          dabbrev_select_buffers_proc, dabbrev_backward_only, dabbrev_limit, &
+                          dabbrev_abbrev_skip_leading_regexp, dabbrev_eliminate_newlines, dabbrev_case_fold_search, &
+                          dabbrev_upcase_means_case_search, dabbrev_case_distinction, dabbrev_case_replace, &
+                          dabbrev_abbrev_char_regexp, dabbrev_check_all_buffers, dabbrev_ignored_buffer_names, &
+                          dabbrev_ignored_buffer_regexps, dabbrev_ignored_buffer_modes, dabbrev_check_other_buffers, &
+                          dabbrev_select_buffers_function, dabbrev_friend_buffer_function, &
+                          dabbrev_search_these_buffers_only, DABBREV_OFF, DABBREV_ON, DABBREV_LIKE_CASE_FOLD_SEARCH, &
+                          DABBREV_LIKE_CASE_REPLACE, DABBREV_ASK
     use callproc_fm, only: shell_file_name
     use simple_fm, only: shell_command, shell_command_on_region, read_shell_command, display_message_or_buffer, &
                          shell_command_switch, shell_command_default_error_buffer, shell_command_prompt_show_cwd, &
@@ -406,6 +434,26 @@ module fortmacs
     public :: kbd_macro_termination_hook, kmacro_ring_max, kmacro_execute_before_append, kmacro_repeat_no_prefix, &
               kmacro_call_repeat_key, kmacro_call_repeat_with_arg, KMACRO_CALL_REPEAT_DISABLED, &
               KMACRO_CALL_REPEAT_LAST_KEY, edmacro_eight_bits
+    public :: abbrev_table_type, abbrev_type, abbrev_ref_type, abbrev_table_ref_type, abbrev_hook_proc, abbrev_enable_proc, &
+              abbrev_expand_proc, global_abbrev_table, fundamental_mode_abbrev_table, abbrev_table_name_list, abbrev_mode, &
+              only_global_abbrevs, abbrev_all_caps, abbrev_file_name, abbrevs_changed, abbrev_start_location, last_abbrev, &
+              last_abbrev_text, last_abbrev_location, abbrev_expand_function, save_abbrevs, SAVE_ABBREVS_NEVER, &
+              SAVE_ABBREVS_ASK, SAVE_ABBREVS_SILENTLY, edit_abbrevs_mode_hook, edit_abbrevs_mode_map, &
+              edit_abbrevs_mode_abbrev_table, kill_all_abbrevs, copy_abbrev_table, insert_abbrevs, list_abbrevs, &
+              abbrev_table_name, edit_abbrevs, write_abbrev_file, inverse_add_mode_abbrev, inverse_add_global_abbrev, &
+              inverse_add_abbrev, abbrev_prefix_mark, expand_region_abbrevs, define_global_abbrev, define_mode_abbrev, &
+              abbrev_symbol, abbrev_expansion, abbrev_insert, expand_abbrev, abbrev_default_expand, unexpand_abbrev, &
+              insert_abbrev_table_description, local_abbrev_table, set_local_abbrev_table, text_mode_abbrev_table, &
+              prog_mode_abbrev_table, special_mode_abbrev_table, help_mode_abbrev_table, save_some_buffers_proc, &
+              save_some_buffers_function_type, save_some_buffers_functions, add_save_some_buffers_function, &
+              dabbrev_expand, dabbrev_same_major_mode_p, dabbrev_select_buffers, dabbrev_friend_buffer_proc, &
+              dabbrev_select_buffers_proc, dabbrev_backward_only, dabbrev_limit, dabbrev_abbrev_skip_leading_regexp, &
+              dabbrev_eliminate_newlines, dabbrev_case_fold_search, dabbrev_upcase_means_case_search, &
+              dabbrev_case_distinction, dabbrev_case_replace, dabbrev_abbrev_char_regexp, dabbrev_check_all_buffers, &
+              dabbrev_ignored_buffer_names, dabbrev_ignored_buffer_regexps, dabbrev_ignored_buffer_modes, &
+              dabbrev_check_other_buffers, dabbrev_select_buffers_function, dabbrev_friend_buffer_function, &
+              dabbrev_search_these_buffers_only, DABBREV_OFF, DABBREV_ON, DABBREV_LIKE_CASE_FOLD_SEARCH, &
+              DABBREV_LIKE_CASE_REPLACE, DABBREV_ASK
     public :: dired, dired_other_window, dired_noselect, dired_mode, dired_mode_map, dired_mode_hook, &
               dired_before_readin_hook, dired_after_readin_hook, dired_initial_position_hook, dired_listing_switches, &
               dired_use_ls_dired, DIRED_USE_LS_DIRED_NIL, DIRED_USE_LS_DIRED_T, DIRED_USE_LS_DIRED_UNSPECIFIED, &

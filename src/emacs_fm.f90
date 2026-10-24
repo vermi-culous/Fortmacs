@@ -57,6 +57,7 @@ module emacs_fm
     use config_fm, only: install_prefix, running_executable, recompile, init_file_name, current_build_name, &
                          generation_of, current_generation, switch_generation, rollback, list_generations
     use indent_fm, only: move_to_column
+    use abbrev_fm, only: abbrevs_changed
     implicit none(type, external)
     private
 
@@ -386,6 +387,9 @@ contains
                 ! (tty-run-terminal-initialization after the init file).
                 call init_frame_faces(selected_frame, terminal_type)
             end if
+            ! If the abbrevs came entirely from the init file or the
+            ! abbrevs file, they do not need saving.
+            abbrevs_changed = .false.
             call command_line_1(rest, st)
             if (.not. st%ok()) call message(format_error(st))
         else

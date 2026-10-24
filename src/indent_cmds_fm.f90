@@ -28,7 +28,7 @@
 !> Not ported: `tab_always_indent' `complete' and `tab_first_completion',
 !> `indent_for_tab_command' with a prefix argument (needs sexps),
 !> `edit_tab_stops', right-to-left paragraphs, the margin text-property
-!> commands (`set_left_margin' and friends), abbrevs.
+!> commands (`set_left_margin' and friends).
 submodule(indent_fm) indent_cmds_fm
     use commands_fm, only: commands
     use error_fm, only: set_error, FM_GENERIC_ERROR
@@ -44,7 +44,8 @@ submodule(indent_fm) indent_cmds_fm
     use insdel_fm, only: insert
     use cmds_fm, only: forward_line, beginning_of_line
     use textprop_fm, only: get_text_property
-    use syntax_fm, only: skip_chars_forward, skip_chars_backward
+    use syntax_fm, only: skip_chars_forward, skip_chars_backward, char_syntax
+    use abbrev_fm, only: abbrev_mode_p, expand_abbrev
     use search_fm, only: looking_at, re_search_backward, re_search_forward, regexp_quote, SEARCH_NOERROR
     use keymap_fm, only: make_sparse_keymap, keymap_set_key => define_key, key_parse
     use keyboard_fm, only: this_command, last_command, set_transient_map
@@ -296,10 +297,15 @@ contains
     end subroutine widened_indent_line
 
     !> Insert a tab, or indent to the next tab column, ARG times.  Port of
-    !> indent.el:insert-tab (no abbrevs).
+    !> indent.el:insert-tab.
     module procedure insert_tab
     integer(int64) :: count, col
     count = prefix_numeric_value(arg)
+    status = status_type()
+    if (abbrev_mode_p()) then
+        if (char_syntax(int(preceding_char())) == "w") call expand_abbrev(status)
+        if (.not. status%ok()) return
+    end if
     if (indent_tabs_mode%value) then
         call insert_char_n(9, count, status)
     else
@@ -738,7 +744,7 @@ contains
     !> call `tab_to_tab_stop'.
     !>
     !> See also `indent_relative_first_indent_point'.  Port of
-    !> indent.el:indent-relative (no abbrevs).
+    !> indent.el:indent-relative.
     module procedure indent_relative
     integer(int64) :: start_column, opoint, pos, end, col, moved, indent, shortage
     type(handle_type) :: opoint_marker
@@ -750,6 +756,10 @@ contains
     if (present(first_only)) first = first_only
     unindented = .false.
     if (present(unindented_ok)) unindented = unindented_ok
+    if (abbrev_mode_p()) then
+        if (char_syntax(int(preceding_char())) == "w") call expand_abbrev(status)
+        if (.not. status%ok()) return
+    end if
     start_column = current_column()
     have_indent = .false.
     indent = 0
@@ -855,9 +865,14 @@ contains
     !> Insert spaces or tabs to next defined tab-stop column.
     !> The variable `tab_stop_list' is an array of columns at which there are tab stops.
     !> Whether this inserts tabs or spaces depends on `indent_tabs_mode'.
-    !> Port of indent.el:tab-to-tab-stop (no abbrevs).
+    !> Port of indent.el:tab-to-tab-stop.
     module procedure tab_to_tab_stop
     integer(int64) :: nexttab, col
+    status = status_type()
+    if (abbrev_mode_p()) then
+        if (char_syntax(int(preceding_char())) == "w") call expand_abbrev(status)
+        if (.not. status%ok()) return
+    end if
     nexttab = indent_next_tab_stop(current_column())
     call delete_horizontal_space(.true., status)
     if (status%ok()) col = indent_to(nexttab, status)

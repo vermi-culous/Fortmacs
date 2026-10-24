@@ -75,6 +75,7 @@ module files_fm
     public :: set_visited_file_name, write_file
     public :: make_directory
     public :: normal_mode, set_auto_mode, add_auto_mode, file_name_sans_versions, auto_mode_spec
+    public :: save_some_buffers_proc, add_save_some_buffers_function
     public :: find_file_other_window, backup_file_name_p, revert_buffer, revert_function_proc, find_directory_proc
     public :: insert_directory, insert_directory_clean, insert_directory_wildcard_in_dir_p, file_truename, &
               delete_file, delete_directory, file_name_extension, auto_save_file_name_p, &
@@ -458,6 +459,41 @@ module files_fm
     !> (3) the new file name does not particularly specify any mode.
     !> Port of files.el change-major-mode-with-file-name.
     logical, public :: change_major_mode_with_file_name = .true.
+
+    abstract interface
+        !> A function of `save_some_buffers_functions': with QUERY, RESULT
+        !> tells whether there is something to be saved (but nothing is
+        !> saved); else it saves according to ARG, the ARG argument with which
+        !> `save_some_buffers' was called, and RESULT true inhibits the
+        !> message `save_some_buffers' gives.
+        recursive subroutine save_some_buffers_proc(query, arg, result, status)
+            import :: status_type
+            implicit none(type, external)
+            logical, intent(in) :: query, arg
+            logical, intent(out) :: result
+            type(status_type), intent(out) :: status
+        end subroutine save_some_buffers_proc
+    end interface
+
+    !> A function of `save_some_buffers_functions'.
+    type, public :: save_some_buffers_function_type
+        procedure(save_some_buffers_proc), pointer, nopass :: fn => null()
+    end type save_some_buffers_function_type
+
+    !> Functions to be run by `save_some_buffers' after saving the buffers.
+    !> These functions (`save_some_buffers_proc') can be called in two
+    !> "modes", depending on their first argument, QUERY.  If QUERY is true,
+    !> then the function should return true if there is something to be
+    !> saved (but it should not actually save anything).
+    !>
+    !> If QUERY is false, then the function should
+    !> save according to the value of the second argument, which is the
+    !> ARG argument with which `save_some_buffers' was called.
+    !>
+    !> The main purpose of these functions is to save stuff that is kept
+    !> in variables (rather than in buffers).  Port of files.el
+    !> save-some-buffers-functions.
+    type(save_some_buffers_function_type), allocatable, public :: save_some_buffers_functions(:)
 
     !> Buffers save_some_buffers is asking about (its map-y-or-n-p list).
     type(handle_type), allocatable :: pending(:)
@@ -1083,17 +1119,35 @@ contains
         call set_buffer(old, st)
     end subroutine save_actor
 
+    !> Add FN to the front of `save_some_buffers_functions', unless it is
+    !> there (add-hook).
+    subroutine add_save_some_buffers_function(fn)
+        procedure(save_some_buffers_proc) :: fn
+        type(save_some_buffers_function_type), allocatable :: grown(:)
+        integer :: k, n
+        n = 0
+        if (allocated(save_some_buffers_functions)) n = size(save_some_buffers_functions)
+        do k = 1, n
+            if (associated(save_some_buffers_functions(k)%fn, fn)) return
+        end do
+        allocate (grown(n + 1))
+        grown(1)%fn => fn
+        if (n > 0) grown(2:) = save_some_buffers_functions
+        call move_alloc(grown, save_some_buffers_functions)
+    end subroutine add_save_some_buffers_function
+
     !> Ask about saving each modified file-visiting buffer, then save
     !> those the user accepts (all, without asking, if `arg').
-    !> Port of files.el:save-some-buffers (PRED nil; no
-    !> buffer-save-without-query, buffer-offer-save or
-    !> save-some-buffers-functions).
-    subroutine save_some_buffers(arg, called_interactively, status)
+    !> The functions in `save_some_buffers_functions' are called after
+    !> saving the buffers.  Port of files.el:save-some-buffers (PRED nil;
+    !> no buffer-save-without-query or buffer-offer-save).
+    recursive subroutine save_some_buffers(arg, called_interactively, status)
         logical, intent(in) :: arg, called_interactively
         type(status_type), intent(out) :: status
         type(handle_type), allocatable :: all(:)
         integer(int64) :: k, i, n
         integer :: done
+        logical :: inhibit, r
         ! files--buffers-needing-to-be-saved
         all = buffer_list()
         allocate (pending(size(all)))
@@ -1119,7 +1173,16 @@ contains
         end if
         deallocate (pending)
         if (.not. status%ok()) return
-        if (n == 0 .and. called_interactively) call message("(No files need saving)")
+        ! Allow other things to be saved at this time, like abbrevs.
+        inhibit = .false.
+        if (allocated(save_some_buffers_functions)) then
+            do k = 1, size(save_some_buffers_functions, kind=int64)
+                call save_some_buffers_functions(k)%fn(.false., arg, r, status)
+                if (.not. status%ok()) return
+                inhibit = r .or. inhibit
+            end do
+        end if
+        if (n == 0 .and. called_interactively .and. .not. inhibit) call message("(No files need saving)")
     end subroutine save_some_buffers
 
     !> Whether any live buffer visits a file and is modified.
@@ -1143,11 +1206,20 @@ contains
     !> Offer to save each modified file buffer, then leave Emacs, asking
     !> first if any stay unsaved.  Port of files.el:save-buffers-kill-emacs
     !> (no processes, kill-emacs-query-functions or confirm-kill-emacs).
-    subroutine save_buffers_kill_emacs(arg, status)
+    recursive subroutine save_buffers_kill_emacs(arg, status)
         logical, intent(in) :: arg
         type(status_type), intent(out) :: status
-        logical :: ok
-        if (modified_file_buffers_exist()) then
+        logical :: ok, need_save
+        integer :: k
+        need_save = modified_file_buffers_exist()
+        if (.not. need_save .and. allocated(save_some_buffers_functions)) then
+            do k = 1, size(save_some_buffers_functions)
+                call save_some_buffers_functions(k)%fn(.true., .false., need_save, status)
+                if (.not. status%ok()) return
+                if (need_save) exit
+            end do
+        end if
+        if (need_save) then
             call save_some_buffers(arg, .false., status)
             if (.not. status%ok()) return
         end if

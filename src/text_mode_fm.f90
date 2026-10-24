@@ -30,6 +30,7 @@ module text_mode_fm
     use syntax_fm, only: make_syntax_table, modify_syntax_entry, syntax_table_live_p
     use modes_fm, only: major_modes
     use eval_fm, only: hook_type
+    use abbrev_fm, only: abbrev_table_type
     implicit none(type, external)
     private
 
@@ -52,6 +53,10 @@ module text_mode_fm
 
     !> Syntax table used while in `text_mode'.
     type(handle_type), public :: text_mode_syntax_table
+
+    !> Abbrev table for `text_mode'.  Port of text-mode.el
+    !> text-mode-abbrev-table (made by define-derived-mode).
+    type(abbrev_table_type), target, public :: text_mode_abbrev_table
 
 contains
 
@@ -96,7 +101,7 @@ contains
     subroutine syms_of_text_mode()
         if (.not. syntax_table_live_p(text_mode_syntax_table)) call init_text_mode_syntax_table()
         call major_modes%text_mode%define("text_mode", "Text", text_mode, text_mode_hook, &
-                                          syntax_table=text_mode_syntax_table)
+                                          syntax_table=text_mode_syntax_table, abbrev_table=text_mode_abbrev_table)
         text_mode_map = major_modes%text_mode%map
         commands%text_mode%run => text_mode
     end subroutine syms_of_text_mode

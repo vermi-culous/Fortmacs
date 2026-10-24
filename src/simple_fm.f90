@@ -85,6 +85,7 @@ module simple_fm
                          SEARCH_NOERROR
     use fns_fm, only: value_equal
     use eval_fm, only: hook_type
+    use abbrev_fm, only: abbrev_table_type
     use insdel_fm, only: insert_before_markers
     use editfns_fm, only: char_before, eolp, point_marker, delete_and_extract_region, char_after, pos_bol, &
                           inhibit_field_text_motion
@@ -248,6 +249,10 @@ module simple_fm
     !> Keymap for `special_mode'.  Port of simple.el special-mode-map.
     type(handle_type), public :: special_mode_map
 
+    !> Abbrev table for `special_mode'.  Port of simple.el
+    !> special-mode-abbrev-table (made by define-derived-mode).
+    type(abbrev_table_type), target, public :: special_mode_abbrev_table
+
     !> Hook run after entering or leaving `transient_mark_mode'.
     type(hook_type), target, public :: transient_mark_mode_hook = hook_type(name="transient_mark_mode_hook")
 
@@ -353,8 +358,8 @@ module simple_fm
         !> Insert a newline and leave point before it.
         !> If there is a fill prefix and/or a `left_margin', insert them on
         !> the new line if the line would have been blank.
-        !> With arg N, insert N newlines.  Port of simple.el:open-line (no
-        !> abbrevs).  (In simple_fill_fm.)
+        !> With arg N, insert N newlines.  Port of simple.el:open-line.
+        !> (In simple_fill_fm.)
         module subroutine open_line(n, status)
             implicit none(type, external)
             integer(int64), intent(in) :: n

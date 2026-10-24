@@ -33,6 +33,7 @@ module help_mode_fm
     use keymap_fm, only: keymap_live_p
     use modes_fm, only: major_modes
     use eval_fm, only: hook_type
+    use abbrev_fm, only: abbrev_table_type
     use simple_fm, only: syms_of_simple_modes
     implicit none(type, external)
     private
@@ -46,13 +47,17 @@ module help_mode_fm
     !> Hook run by `help_mode'.  Port of help-mode.el help-mode-hook.
     type(hook_type), target, public :: help_mode_hook = hook_type(name="help_mode_hook")
 
+    !> Abbrev table for `help_mode'.  Port of help-mode.el
+    !> help-mode-abbrev-table (made by define-derived-mode).
+    type(abbrev_table_type), target, public :: help_mode_abbrev_table
+
 contains
 
     !> Define Help mode and its parent, Special mode.
     subroutine init_help_mode()
         call syms_of_simple_modes()
         call major_modes%help_mode%define("help_mode", "Help", help_mode, help_mode_hook, &
-                                          parent=major_modes%special_mode)
+                                          parent=major_modes%special_mode, abbrev_table=help_mode_abbrev_table)
         help_mode_map = major_modes%help_mode%map
         commands%help_mode%run => help_mode
     end subroutine init_help_mode

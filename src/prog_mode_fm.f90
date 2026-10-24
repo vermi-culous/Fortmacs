@@ -26,6 +26,7 @@ module prog_mode_fm
     use error_fm, only: status_type
     use modes_fm, only: major_modes
     use eval_fm, only: hook_type
+    use abbrev_fm, only: abbrev_table_type
     use handle_fm, only: handle_type
     use files_fm, only: require_final_newline, mode_require_final_newline
     use syntax_fm, only: parse_sexp_ignore_comments
@@ -41,6 +42,10 @@ module prog_mode_fm
     !> Keymap used for programming modes.  Port of prog-mode.el
     !> prog-mode-map.
     type(handle_type), public :: prog_mode_map
+
+    !> Abbrev table for `prog_mode'.  Port of prog-mode.el
+    !> prog-mode-abbrev-table (made by define-derived-mode).
+    type(abbrev_table_type), target, public :: prog_mode_abbrev_table
 
 contains
 
@@ -59,7 +64,8 @@ contains
     !> Define Prog mode.  Its parent is fundamental-mode, which
     !> define-derived-mode takes as no parent.
     subroutine syms_of_prog_mode()
-        call major_modes%prog_mode%define("prog_mode", "Prog", prog_mode, prog_mode_hook)
+        call major_modes%prog_mode%define("prog_mode", "Prog", prog_mode, prog_mode_hook, &
+                                          abbrev_table=prog_mode_abbrev_table)
         prog_mode_map = major_modes%prog_mode%map
         commands%prog_mode%run => prog_mode
     end subroutine syms_of_prog_mode

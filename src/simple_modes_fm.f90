@@ -82,7 +82,8 @@ contains
     ! Fundamental mode is not derived; it is defined so that other modes
     ! can name it as their parent.
     call major_modes%fundamental_mode%define("fundamental_mode", "Fundamental", fundamental_mode)
-    call major_modes%special_mode%define("special_mode", "Special", special_mode, special_mode_hook)
+    call major_modes%special_mode%define("special_mode", "Special", special_mode, special_mode_hook, &
+                                         abbrev_table=special_mode_abbrev_table)
     special_mode_map = major_modes%special_mode%map
     major_modes%special_mode%special = .true.
     call minor_modes%transient_mark_mode%define("transient_mark_mode", global=.true., &

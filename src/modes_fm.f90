@@ -36,6 +36,7 @@ module modes_fm
     type :: major_mode_table_type
         type(major_mode_type) :: compilation_mode
         type(major_mode_type) :: dired_mode
+        type(major_mode_type) :: edit_abbrevs_mode
         type(major_mode_type) :: fundamental_mode
         type(major_mode_type) :: help_mode
         type(major_mode_type) :: prog_mode
@@ -45,6 +46,7 @@ module modes_fm
 
     !> One component per built-in minor mode.
     type :: minor_mode_table_type
+        type(minor_mode_type) :: abbrev_mode
         type(minor_mode_type) :: auto_fill_mode
         type(minor_mode_type) :: font_lock_mode
         type(minor_mode_type) :: global_font_lock_mode
