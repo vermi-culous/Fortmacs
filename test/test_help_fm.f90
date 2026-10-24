@@ -31,7 +31,7 @@ module test_help_fm
     use callint_fm, only: current_prefix_arg
     use files_fm, only: require_final_newline, FINAL_NEWLINE_VISIT, FINAL_NEWLINE_NEVER
     use buffer_fm, only: buffers, cur, get_buffer_create, get_buffer, set_buffer, current_buffer, buffer_modified_p, &
-                         auto_fill_function
+                         auto_fill_function, buffer_live_p
     use frame_fm, only: selected_frame, ensure_frame_windows
     use window_fm, only: windows, window_leaves, delete_other_windows, switch_to_buffer, resize_window_tree
     use editfns_fm, only: buffer_string
@@ -42,7 +42,11 @@ module test_help_fm
     use xdisp_fm, only: tab_width
     use isearch_fm, only: search_upper_case, UPPER_CASE_T, UPPER_CASE_NOT_YANKS
     use simple_fm, only: fill_prefix, do_auto_fill
-    use help_fm, only: substitute_command_keys, with_help_window
+    use help_fm, only: substitute_command_keys, with_help_window, describe_map_tree, lossage_comment_indent, &
+                       make_separator_line, register_keymap_name
+    use xdisp_fm, only: message, message_nolog
+    use keymap_fm, only: make_sparse_keymap, free_keymap
+    use lisp_fm, only: make_keymap_ref
     use help_fns_fm, only: describe_function_1, describe_variable_text
     implicit none(type, external)
     private
@@ -50,7 +54,7 @@ module test_help_fm
     public :: collect_help_fm
 
     character(len=*), parameter :: LQ = char(226)//char(128)//char(152), RQ = char(226)//char(128)//char(153), &
-                                   LF = achar(10)
+                                   LF = achar(10), TAB = achar(9), FF = achar(12)
 
 contains
 
@@ -81,7 +85,25 @@ contains
                     new_unittest("where-is", test_where_is), &
                     new_unittest("advertised-binding", test_advertised_binding), &
                     new_unittest("describe-function-keys", test_describe_function_keys), &
-                    new_unittest("describe-variable-keys", test_describe_variable_keys) &
+                    new_unittest("describe-variable-keys", test_describe_variable_keys), &
+                    new_unittest("help-tests-substitute-command-keys/keymaps", test_sck_keymaps), &
+                    new_unittest("help-tests-substitute-command-keys/undefined-map", test_sck_undefined_map), &
+                    new_unittest("help-tests-describe-map-tree/mention-shadow-t", test_map_tree_shadow_t), &
+                    new_unittest("help-tests-describe-map-tree/mention-shadow-nil", test_map_tree_shadow_nil), &
+                    new_unittest("help-tests-describe-map-tree/partial-t", test_map_tree_partial_t), &
+                    new_unittest("help-tests-describe-map-tree/partial-nil", test_map_tree_partial_nil), &
+                    new_unittest("describe-map-tree-ranges-and-prefixes", test_map_tree_ranges), &
+                    new_unittest("describe-bindings", test_describe_bindings), &
+                    new_unittest("describe-mode", test_describe_mode), &
+                    new_unittest("help-fns-test-describe-symbol", test_describe_symbol), &
+                    new_unittest("describe-command", test_describe_command_x), &
+                    new_unittest("describe-variable-customize", test_describe_variable_customize), &
+                    new_unittest("view-lossage", test_view_lossage), &
+                    new_unittest("lossage-comment-indent", test_lossage_indent), &
+                    new_unittest("view-echo-area-messages", test_view_messages), &
+                    new_unittest("messages-log-duplicates", test_messages_duplicates), &
+                    new_unittest("help-for-help", test_help_for_help), &
+                    new_unittest("help-for-help-unbound-key", test_help_for_help_unbound) &
                     ]
     end subroutine collect_help_fm
 
@@ -627,4 +649,407 @@ contains
         ! Back to one window.
         call fresh_scratch()
     end subroutine test_describe_variable_keys
+    subroutine test_sck_keymaps(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(status_type) :: st
+        character(len=24), parameter :: keys(21) = [character(len=24) :: "C-g", "TAB", "C-j", "RET", "SPC", "?", &
+                                                                  "C-<tab>", "<XF86Back>", "<XF86Forward>", "<backtab>", "<down>", &
+                                                                   "<next>", "<prior>", "<up>", "M-v", "M-<", "M-n", "M-p", "M-r", &
+                                                                                                                   "M-s", "M-g M-c"]
+        character(len=40), parameter :: defs(21) = [character(len=40) :: "abort_minibuffers", "minibuffer_complete", &
+                                                                   "minibuffer_complete_and_exit", "minibuffer_complete_and_exit", &
+                                                                         "minibuffer_complete_word", "minibuffer_completion_help", &
+                                                                     "file_cache_minibuffer_complete", "previous_history_element", &
+                                                                                    "next_history_element", "minibuffer_complete", &
+                                                                           "next_line_or_history_element", "next_history_element", &
+                                                                      "switch_to_completions", "previous_line_or_history_element", &
+                                                                        "switch_to_completions", "minibuffer_beginning_of_buffer", &
+                                                                               "next_history_element", "previous_history_element", &
+                                                                                              "previous_matching_history_element", &
+                                                                           "next_matching_history_element", "switch_to_completions"]
+        integer :: k
+        call fresh_scratch()
+        call make_sparse_keymap(map)
+        do k = 1, size(keys)
+            call keymap_set(map, trim(keys(k)), sym(trim(defs(k))), st)
+        end do
+        call register_keymap_name("help_tests_test_keymap", map)
+        call test_sck(error, "\{help_tests_test_keymap}", LF//"Key             Binding"//LF//sep()// &
+                      "C-g"//TAB//TAB//"abort_minibuffers"//LF//"TAB"//TAB//TAB//"minibuffer_complete"//LF// &
+                      "C-j"//TAB//TAB//"minibuffer_complete_and_exit"//LF//"RET"//TAB//TAB//"minibuffer_complete_and_exit"// &
+                      LF//"SPC"//TAB//TAB//"minibuffer_complete_word"//LF//"?"//TAB//TAB//"minibuffer_completion_help"//LF// &
+                      "C-<tab>"//TAB//TAB//"file_cache_minibuffer_complete"//LF// &
+                      "<XF86Back>"//TAB//"previous_history_element"//LF//"<XF86Forward>"//TAB//"next_history_element"//LF// &
+                      "<backtab>"//TAB//"minibuffer_complete"//LF//"<down>"//TAB//TAB//"next_line_or_history_element"//LF// &
+                      "<next>"//TAB//TAB//"next_history_element"//LF//"<prior>"//TAB//TAB//"switch_to_completions"//LF// &
+                      "<up>"//TAB//TAB//"previous_line_or_history_element"//LF//LF// &
+                      "M-<"//TAB//TAB//"minibuffer_beginning_of_buffer"//LF//"M-n"//TAB//TAB//"next_history_element"//LF// &
+                      "M-p"//TAB//TAB//"previous_history_element"//LF//"M-r"//TAB//TAB//"previous_matching_history_element"// &
+                      LF//"M-s"//TAB//TAB//"next_matching_history_element"//LF//"M-v"//TAB//TAB//"switch_to_completions"// &
+                      LF//LF//"M-g M-c"//TAB//TAB//"switch_to_completions"//LF)
+        call free_keymap(map, st)
+    end subroutine test_sck_keymaps
+
+    subroutine test_sck_undefined_map(error)
+        type(error_type), allocatable, intent(out) :: error
+        call test_sck(error, "\{foobar_map}", LF//"Uses keymap "//LQ//"foobar_map"//RQ//", which is not currently defined."//LF)
+    end subroutine test_sck_undefined_map
+
+    !> The text of help--describe-map-tree for `map' (title "" as nil).
+    function map_tree_text(map, partial, shadow, mention) result(text)
+        type(handle_type), intent(in) :: map
+        logical, intent(in) :: partial, mention
+        type(value_type), intent(in) :: shadow(:)
+        character(len=:), allocatable :: text
+        text = ""
+        call describe_map_tree(map, partial, shadow, "", .false., text, mention_shadow=mention)
+    end function map_tree_text
+
+    !> The separator line: dashes without a display that underlines (as
+    !> in tests run alone), else a newline.
+    function sep() result(s)
+        character(len=:), allocatable :: s
+        s = make_separator_line()
+    end function sep
+
+    subroutine shadow_maps(map, shadow)
+        type(handle_type), intent(out) :: map
+        type(value_type), allocatable, intent(out) :: shadow(:)
+        type(handle_type) :: s
+        type(status_type) :: st
+        call make_sparse_keymap(map)
+        call keymap_set(map, "C-a", sym("foo"), st)
+        call keymap_set(map, "C-b", sym("bar"), st)
+        call make_sparse_keymap(s)
+        call keymap_set(s, "C-a", sym("baz"), st)
+        allocate (shadow(1))
+        shadow(1) = make_keymap_ref(s)
+    end subroutine shadow_maps
+
+    subroutine test_map_tree_shadow_t(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(value_type), allocatable :: shadow(:)
+        character(len=:), allocatable :: text
+        type(status_type) :: st
+        call fresh_scratch()
+        call shadow_maps(map, shadow)
+        text = map_tree_text(map, .true., shadow, .true.)
+        call check(error, text, LF//"Key             Binding"//LF//sep()//"C-a"//TAB//TAB//"foo"//LF// &
+                   "  (this binding is currently shadowed)"//LF//"C-b"//TAB//TAB//"bar"//LF)
+        call free_keymap(map, st)
+    end subroutine test_map_tree_shadow_t
+
+    subroutine test_map_tree_shadow_nil(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(value_type), allocatable :: shadow(:)
+        character(len=:), allocatable :: text
+        type(status_type) :: st
+        call fresh_scratch()
+        call shadow_maps(map, shadow)
+        text = map_tree_text(map, .true., shadow, .false.)
+        call check(error, text, LF//"Key             Binding"//LF//sep()//"C-b"//TAB//TAB//"bar"//LF)
+        call free_keymap(map, st)
+    end subroutine test_map_tree_shadow_nil
+
+    subroutine test_map_tree_partial_t(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(value_type), allocatable :: none(:)
+        type(status_type) :: st
+        call fresh_scratch()
+        allocate (none(0))
+        call make_sparse_keymap(map)
+        call keymap_set(map, "C-a", sym("foo"), st)
+        call keymap_set(map, "C-b", sym("undefined"), st)
+        call check(error, map_tree_text(map, .true., none, .false.), &
+                   LF//"Key             Binding"//LF//sep()//"C-a"//TAB//TAB//"foo"//LF)
+        call free_keymap(map, st)
+    end subroutine test_map_tree_partial_t
+
+    subroutine test_map_tree_partial_nil(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(value_type), allocatable :: none(:)
+        type(status_type) :: st
+        call fresh_scratch()
+        allocate (none(0))
+        call make_sparse_keymap(map)
+        call keymap_set(map, "C-a", sym("foo"), st)
+        call keymap_set(map, "C-b", sym("undefined"), st)
+        call check(error, map_tree_text(map, .false., none, .false.), &
+                   LF//"Key             Binding"//LF//sep()//"C-a"//TAB//TAB//"foo"//LF//"C-b"//TAB//TAB//"undefined"//LF)
+        call free_keymap(map, st)
+    end subroutine test_map_tree_partial_nil
+
+    !> Runs of characters bound alike, prefix maps after the map itself
+    !> (accessible-keymaps), keys too wide for column 16, the natural
+    !> order of function keys.
+    subroutine test_map_tree_ranges(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: map
+        type(value_type), allocatable :: none(:)
+        type(status_type) :: st
+        call fresh_scratch()
+        allocate (none(0))
+        call make_sparse_keymap(map)
+        call keymap_set(map, "a", sym("self_insert_command"), st)
+        call keymap_set(map, "b", sym("self_insert_command"), st)
+        call keymap_set(map, "c", sym("self_insert_command"), st)
+        call keymap_set(map, "<f11>", sym("eleven"), st)
+        call keymap_set(map, "<f2>", sym("two"), st)
+        call keymap_set(map, "C-c C-x", sym("ccx"), st)
+        call keymap_set(map, "C-c <some-long-key-name>", sym("long"), st)
+        call check(error, map_tree_text(map, .true., none, .false.), &
+                   LF//"Key             Binding"//LF//sep()//"a .. c"//TAB//TAB//"self_insert_command"//LF// &
+                   "<f2>"//TAB//TAB//"two"//LF//"<f11>"//TAB//TAB//"eleven"//LF//LF// &
+                   "C-c C-x"//repeat(TAB, 4)//"ccx"//LF//"C-c <some-long-key-name>"//TAB//"long"//LF)
+        call free_keymap(map, st)
+    end subroutine test_map_tree_ranges
+
+    !> C-h b: the major mode's map, then the global map, its bindings
+    !> shadowed by the major mode's map mentioned.
+    subroutine test_describe_bindings(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        integer :: k1, k2
+        call fresh_scratch()
+        call switch_to_buffer("*bindings*", st)
+        call text_mode(st)
+        call keymap_set(text_mode_map, "C-f", "backward_char", st)
+        call type_keys("C-h b")
+        call command_loop(st)
+        call keymap_set(text_mode_map, "C-f", nil(), st)
+        text = help_text()
+        k1 = index(text, FF//LF//LQ//"text_mode"//RQ//" Major Mode Bindings:"//LF//LF//"Key             Binding"//LF// &
+                   sep())
+        k2 = index(text, FF//LF//"Global Bindings:"//LF//LF//"Key             Binding"//LF//sep())
+        call check(error, k1 == 1 .and. k2 > k1, text)
+        if (allocated(error)) return
+        call check(error, index(text, LF//"C-f"//TAB//TAB//"backward_char"//LF) > k1 .and. &
+                   index(text, LF//"C-f"//TAB//TAB//"forward_char"//LF//"  (this binding is currently shadowed)"//LF) > k2 &
+                   .and. index(text, LF//"C-x C-f"//TAB//TAB//"find_file"//LF) > k2, text)
+        if (allocated(error)) return
+        call check(error, index(text, LF//"SPC .. ~"//TAB//"self_insert_command"//LF) > k2 .and. &
+                   index(text, LF//"C-h b"//TAB//TAB//"describe_bindings"//LF) > k2, text)
+        call fresh_scratch()
+    end subroutine test_describe_bindings
+
+    !> C-h m: the major mode, then the local and global minor modes, each
+    !> under its heading.
+    subroutine test_describe_mode(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call switch_to_buffer("*mode*", st)
+        call text_mode(st)
+        call type_keys("M-x a u t o _ f i l l _ m o d e RET C-h m")
+        call command_loop(st)
+        text = help_text()
+        call check(error, index(text, "Major mode text_mode"//LF//LF//"The major mode is Text mode defined in "// &
+                                "text_mode_fm.f90:"//LF//LF//"Major mode for editing text written for humans to read.") == 1, &
+                   text)
+        if (allocated(error)) return
+        call check(error, index(text, "Turning on Text mode runs the normal hook "//LQ//"text_mode_hook"//RQ//"."//LF//LF// &
+                                "Local minor mode auto_fill_mode"//LF//LF//"Auto_Fill minor mode (indicator Fill):"//LF// &
+                                "Toggle automatic line breaking (Auto Fill mode).") > 0, text)
+        if (allocated(error)) return
+        call check(error, index(text, LF//LF//"Global minor mode transient_mark_mode"//LF//LF// &
+                                "Transient_Mark minor mode (no indicator):"//LF//"Toggle Transient Mark mode.") > 0 .and. &
+                   index(text, "Local minor mode indent_tabs_mode") > index(text, "Local minor mode auto_fill_mode"), text)
+        if (allocated(error)) return
+        ! The text ends with one newline.
+        call check(error, text(len(text) - 1:) /= LF//LF, text)
+        call fresh_scratch()
+    end subroutine test_describe_mode
+
+    !> describe-symbol shows a function and a variable of that name, with
+    !> a separator line between them.
+    subroutine test_describe_symbol(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call type_keys("C-h o t r a n s i e n t _ m a r k _ m o d e RET")
+        call command_loop(st)
+        text = help_text()
+        call check(error, index(text, "transient_mark_mode is an interactive Fortran subroutine") == 1 .and. &
+                   index(text, LF//LF//sep()//LF//"transient_mark_mode is a variable defined in ") > 0, text)
+        if (allocated(error)) return
+        call type_keys("C-h o f i l l _ c o l u m n RET")
+        call command_loop(st)
+        call check(error, index(help_text(), "fill_column is a variable defined in ") == 1, help_text())
+        if (allocated(error)) return
+        call type_keys("C-h o RET")
+        call command_loop(st)
+        call check(error, last_message, "You didn"//RQ//"t specify a function or variable")
+        call fresh_scratch()
+    end subroutine test_describe_symbol
+
+    subroutine test_describe_command_x(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        call fresh_scratch()
+        call type_keys("C-h x f o r w a r d _ c h a r RET")
+        call command_loop(st)
+        call check(error, index(help_text(), "forward_char is an interactive Fortran subroutine") == 1, help_text())
+        if (allocated(error)) return
+        ! Functions that are not commands don't complete.
+        call type_keys("C-h x RET")
+        call command_loop(st)
+        call check(error, last_message, "You didn"//RQ//"t specify a command"//RQ//"s symbol")
+        call fresh_scratch()
+    end subroutine test_describe_command_x
+
+    !> C-h v: the indented lines after the docstring
+    !> (help-fns-describe-variable-functions).
+    subroutine test_describe_variable_customize(error)
+        type(error_type), allocatable, intent(out) :: error
+        character(len=:), allocatable :: text
+        logical :: found
+        call fresh_scratch()
+        call describe_variable_text("fill_column", text, found)
+        call check(error, index(text, "C-x f."//LF//LF//"  Automatically becomes buffer-local when set."//LF// &
+                                "  You can customize this variable."//LF) > 0, text)
+        if (allocated(error)) return
+        call describe_variable_text("case_replace", text, found)
+        call check(error, index(text, LF//LF//"  You can customize this variable."//LF) > 0 .and. &
+                   index(text, "buffer-local") == 0, text)
+        if (allocated(error)) return
+        ! Not a user option.
+        call describe_variable_text("inhibit_modification_hooks", text, found)
+        call check(error, index(text, "customize") == 0, text)
+    end subroutine test_describe_variable_customize
+
+    !> C-h l: the recent keys, each command after its keys as a comment
+    !> at column 24.
+    subroutine test_view_lossage(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call type_keys("a C-b C-f C-x h C-h l")
+        call command_loop(st)
+        text = help_text()
+        call check(error, index(text, LF//" a"//TAB//TAB//TAB//";; self_insert_command"//LF// &
+                                " C-b"//TAB//TAB//TAB//";; backward_char"//LF// &
+                                " C-f"//TAB//TAB//TAB//";; forward_char"//LF// &
+                                " C-x h"//TAB//TAB//TAB//";; mark_whole_buffer"//LF// &
+                                " C-h l"//TAB//TAB//TAB//";; view_lossage"//LF) > 0, text)
+        if (allocated(error)) return
+        ! The text ends with the last command.
+        call check(error, text(len(text) - len(";; view_lossage"//LF) + 1:) == ";; view_lossage"//LF, text)
+        call fresh_scratch()
+    end subroutine test_view_lossage
+
+    !> newcomment.el's comment-indent as view-lossage uses it: code past
+    !> the comment column puts the comment one space after it, and the
+    !> next line aligns with it (comment-choose-indent).
+    subroutine test_lossage_indent(error)
+        type(error_type), allocatable, intent(out) :: error
+        character(len=:), allocatable :: text
+        text = " a b c d e f g h i j k l m n ;; x"//LF//" C-f ;; y"//LF
+        call lossage_comment_indent(text)
+        call check(error, text, " a b c d e f g h i j k l m n ;; x"//LF//" C-f"//TAB//TAB//TAB//"     ;; y"//LF)
+    end subroutine test_lossage_indent
+
+    !> C-h e: the messages logged in *Messages*, at its end.
+    subroutine test_view_messages(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call message("First message")
+        call message("Second message")
+        call message_nolog("Not logged")
+        call type_keys("C-h e")
+        call command_loop(st)
+        text = buf_text("*Messages*")
+        call check(error, index(text, "First message"//LF//"Second message"//LF) > 0 .and. &
+                   index(text, "Not logged") == 0, text)
+        if (allocated(error)) return
+        call check(error, window_count() == 2, "*Messages* is displayed")
+        if (allocated(error)) return
+        ! Errors are logged too.
+        call type_keys("C-x z")
+        call command_loop(st)
+        call message("After")
+        text = buf_text("*Messages*")
+        call check(error, index(text, LF//"C-x z is undefined"//LF//"After"//LF) > 0, text)
+        call fresh_scratch()
+    end subroutine test_view_messages
+
+    !> A repeated message becomes "MESSAGE [N times]" (xdisp.c's
+    !> message_log_check_duplicate); progress messages ending in "..."
+    !> replace each other.
+    subroutine test_messages_duplicates(error)
+        type(error_type), allocatable, intent(out) :: error
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call message("Unique start")
+        call message("Again")
+        call message("Again")
+        call message("Again")
+        call message("Working...")
+        call message("Working...done")
+        text = buf_text("*Messages*")
+        call check(error, index(text, "Unique start"//LF//"Again [3 times]"//LF//"Working...done"//LF) > 0, text)
+    end subroutine test_messages_duplicates
+
+    !> C-h C-h shows the help-for-help screen, and a key runs its command.
+    subroutine test_help_for_help(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call fresh_scratch()
+        call type_keys("C-h C-h SPC f")
+        call unread_command_events([sym("x")])
+        call discard_input()
+        call type_keys("C-h C-h k C-f")
+        call command_loop(st)
+        text = buf_text(" *Metahelp*")
+        call check(error, index(text, "(Type <PageDown> or <PageUp> to scroll, C-s to search, or q to exit.)"//LF//LF// &
+                                "Commands, Keys and Functions"//LF//LF//"   m "//TAB// &
+                                "Show help for current major and minor modes and their commands"//LF) == 1, text)
+        if (allocated(error)) return
+        call check(error, index(text, "   l "//TAB//"Show last 300 input keystrokes (lossage)") > 0, text)
+        if (allocated(error)) return
+        ! Commands not ported yet are listed under their upstream keys.
+        call check(error, index(text, LF//LF//"Manuals"//LF//LF//"   r "//TAB//"Show Emacs manual"//LF) > 0 .and. &
+                   index(text, LF//"   C-n "//TAB//"News of recent changes"//LF) > 0 .and. &
+                   index(text, "   4 s "//TAB//"Show the source for what"//RQ//"s being described in *Help*") > 0 .and. &
+                   index(text, "   h "//TAB//"Display the HELLO file illustrating various scripts"//LF) > 0, text)
+        if (allocated(error)) return
+        ! k ran describe-key, in the previous window configuration.
+        call check(error, index(help_text(), "C-f runs the command forward_char") == 1, help_text())
+        call fresh_scratch()
+    end subroutine test_help_for_help
+
+    subroutine test_help_for_help_unbound(error)
+        type(error_type), allocatable, intent(out) :: error
+        type(status_type) :: st
+        call fresh_scratch()
+        call type_keys("C-h ? z")
+        call command_loop(st)
+        call check(error, last_message, "No help command is bound to "//LQ//"z"//RQ)
+        if (allocated(error)) return
+        call check(error, window_count() == 1, "the window configuration is restored")
+    end subroutine test_help_for_help_unbound
+
+    function buf_text(name) result(text)
+        character(len=*), intent(in) :: name
+        character(len=:), allocatable :: text
+        type(handle_type) :: old
+        type(status_type) :: st
+        old = current_buffer()
+        text = "(none)"
+        if (.not. buffer_live_p(get_buffer(name))) return
+        call set_buffer(get_buffer(name), st)
+        text = buffer_string()
+        call set_buffer(old, st)
+    end function buf_text
 end module test_help_fm

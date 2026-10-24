@@ -34,7 +34,7 @@ submodule(map_ynp_fm) map_ynp_ask_fm
     use callint_fm, only: commandp, call_interactively
     use character_fm, only: MAX_CHAR
     use, intrinsic :: iso_fortran_env, only: int32
-    use xdisp_fm, only: message
+    use xdisp_fm, only: message, message_nolog
     use dispnew_fm, only: ding
     use minibuf_fm, only: read_from_minibuffer, minibuffer_local_map, enable_recursive_minibuffers
     use minibuffer_fm, only: exit_minibuffer, delete_minibuffer_contents
@@ -203,7 +203,7 @@ contains
         ! Clear the last prompt from the minibuffer, and restore the
         ! previous echo-area message, if any.
         if (had_msg) then
-            call message(msg)
+            call message_nolog(msg)
         else
             call message("")
         end if

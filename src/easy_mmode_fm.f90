@@ -45,7 +45,8 @@ module easy_mmode_fm
     implicit none(type, external)
     private
 
-    public :: minor_mode_body_proc, easy_mmode_pretty_mode_name, minor_mode_named, minor_mode_index, minor_mode_at
+    public :: minor_mode_body_proc, easy_mmode_pretty_mode_name, minor_mode_named, minor_mode_index, minor_mode_at, &
+              minor_mode_count
 
     abstract interface
         !> The body of a minor mode, run after its state is set: `enable'
@@ -255,6 +256,13 @@ contains
             end if
         end do
     end function minor_mode_index
+
+    !> The number of defined minor modes (the indices `minor_mode_at'
+    !> takes).
+    integer function minor_mode_count() result(n)
+        n = 0
+        if (allocated(defined)) n = size(defined)
+    end function minor_mode_count
 
     !> The defined minor mode with index K (from `minor_mode_index').
     function minor_mode_at(k) result(p)

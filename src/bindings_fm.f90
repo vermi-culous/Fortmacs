@@ -61,6 +61,7 @@ module bindings_fm
     use minibuffer_fm, only: minibuffer_local_completion_map, minibuffer_local_must_match_map, &
                              minibuffer_local_filename_completion_map, minibuffer_local_filename_must_match_map
     use help_fns_fm, only: syms_of_help_fns
+    use apropos_fm, only: syms_of_apropos
     use minibuf_fm, only: init_minibuf, minibuffer_local_map
     use minibuffer_fm, only: syms_of_minibuffer
     use subr_fm, only: syms_of_subr
@@ -474,6 +475,7 @@ contains
         ! Help (help.el, help-fns.el), after the maps it names exist.
         call syms_of_help(global_map)
         call syms_of_help_fns()
+        call syms_of_apropos()
         ! The other keymap variables, for \<MAP> and help--binding-locus.
         call register_keymap_name("esc_map", esc_map)
         call register_keymap_name("ctl_x_map", ctl_x_map)

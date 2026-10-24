@@ -143,8 +143,8 @@ module data_fm
     public :: value_eq, car, cdr, car_safe, cdr_safe
     public :: symbol_name, keywordp, boundp, symbol_value, set, makunbound
     public :: make_local_variable, make_variable_buffer_local, kill_local_variable, kill_all_local_variables, &
-              local_variable_p, local_variable_if_set_p, default_value, set_default, default_boundp, &
-              buffer_local_value, buffer_local_variables, setq_local
+              local_variable_p, local_variable_if_set_p, automatically_local_p, forwarded_variable_p, default_value, &
+              set_default, default_boundp, buffer_local_value, buffer_local_variables, setq_local
 
     interface
         !> The value of the Fortran variable forwarded to by the symbol
@@ -275,6 +275,23 @@ module data_fm
             type(value_type), intent(in) :: variable
             integer(int64), intent(in), optional :: buffer
         end function local_variable_if_set_p
+
+        !> Whether VARIABLE is automatically buffer-local: it gets a local
+        !> value in any buffer where it is set (`make_variable_buffer_local').
+        !> (Ours; data.c's SYMBOL_LOCALIZED with local_if_set.)  (In
+        !> data_buffer_fm.)
+        module logical function automatically_local_p(variable)
+            implicit none(type, external)
+            type(value_type), intent(in) :: variable
+        end function automatically_local_p
+
+        !> Whether VARIABLE is forwarded to a Fortran setting, so its
+        !> buffer-local values are those of the setting object.  (Ours;
+        !> data.c's SYMBOL_FORWARDED.)  (In data_buffer_fm.)
+        module logical function forwarded_variable_p(variable)
+            implicit none(type, external)
+            type(value_type), intent(in) :: variable
+        end function forwarded_variable_p
 
         !> Return SYMBOL's default value.
         !> This is the value that is seen in buffers that do not have their own values

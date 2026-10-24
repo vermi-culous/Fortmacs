@@ -87,6 +87,7 @@ module keyboard_fm
     public :: start_kbd_macro, end_kbd_macro, call_last_kbd_macro, store_kbd_macro_char, store_kbd_macro_event, &
               finalize_kbd_macro_chars, cancel_kbd_macro_events, finish_kbd_macro, defining_kbd_macro_p, &
               syms_of_macros
+    public :: recent_keys, lossage_size, message_log_proc
     public :: READ_KEY_ELTS, redisplay_proc, transient_exit_proc, kbd_macro_loop_proc
 
     !> keyboard.c:READ_KEY_ELTS, the longest key sequence.
@@ -158,6 +159,13 @@ module keyboard_fm
             implicit none(type, external)
         end function kbd_macro_loop_proc
 
+        !> Log `text' in the *Messages* buffer as echo-area output
+        !> (xdisp.c via print.c:printchar).
+        subroutine message_log_proc(text)
+            implicit none(type, external)
+            character(len=*), intent(in) :: text
+        end subroutine message_log_proc
+
         !> Run a disabled command's handler instead of the command, if
         !> CMD is disabled: `handled' says it was.
         subroutine disabled_command_proc(cmd, handled, status)
@@ -173,6 +181,25 @@ module keyboard_fm
     !> property test and `disabled_command_function'), set by novice_fm;
     !> null for none.
     procedure(disabled_command_proc), pointer, public :: disabled_command_hook => null()
+
+    !> Logs the error messages of the command loop in *Messages*
+    !> (xdisp_fm sits above this module; set by simple_fm); null for
+    !> none.
+    procedure(message_log_proc), pointer, public :: message_log_hook => null()
+
+    !> keyboard.c:lossage_limit, the number of events and commands
+    !> `recent_keys' keeps (3 * MIN_NUM_RECENT_KEYS).
+    integer, parameter :: LOSSAGE_LIMIT = 300
+
+    !> keyboard.c:recent_keys, a ring of the last LOSSAGE_LIMIT input
+    !> events not from keyboard macros, and of the commands run, as
+    !> upstream's pseudo-events (nil . COMMAND): `recent_is_command' marks
+    !> those, whose command (nil for an undefined key) is in
+    !> `recent_events'.  The next entry goes at `recent_keys_index'
+    !> (1-based); `total_keys' entries are filled.
+    type(value_type) :: recent_events(LOSSAGE_LIMIT)
+    logical :: recent_is_command(LOSSAGE_LIMIT) = .false.
+    integer :: recent_keys_index = 1, total_keys = 0
 
     !> Called by read_event before it waits for terminal input, so the
     !> screen is current.  Set by the program (xdisp_fm sits above this
@@ -595,7 +622,59 @@ contains
         if (.not. have) return
         last_input_event = ev
         if (.not. macro_active) call store_kbd_macro_char(ev)
+        ! recent_keys should not include events from keyboard macros.
+        if (.not. macro_active) call record_recent(ev, .false.)
     end subroutine read_event
+
+    !> Store `ev' (an event, or the command run if `command') into the
+    !> ring of recent keys.  The recent_keys part of keyboard.c:record_char
+    !> (no help-echo or mouse-movement events) and of command_loop_1.
+    subroutine record_recent(ev, command)
+        type(value_type), intent(in) :: ev
+        logical, intent(in) :: command
+        if (total_keys < LOSSAGE_LIMIT) total_keys = total_keys + 1
+        recent_events(recent_keys_index) = ev
+        recent_is_command(recent_keys_index) = command
+        recent_keys_index = recent_keys_index + 1
+        if (recent_keys_index > LOSSAGE_LIMIT) recent_keys_index = 1
+    end subroutine record_recent
+
+    !> Return the last few events, not counting those from keyboard macros.
+    !> If INCLUDE_CMDS is true, include the commands that were run, as
+    !> pseudo-events: `is_command' marks them, their command (.false.
+    !> for none) being the event.  Port of keyboard.c:Frecent_keys.
+    subroutine recent_keys(include_cmds, keys, is_command)
+        logical, intent(in) :: include_cmds
+        type(value_type), allocatable, intent(out) :: keys(:)
+        logical, allocatable, intent(out) :: is_command(:)
+        integer :: i, k, n, first
+        if (total_keys < LOSSAGE_LIMIT) then
+            first = 1
+        else
+            first = recent_keys_index
+        end if
+        n = total_keys
+        if (.not. include_cmds) n = total_keys - count(recent_is_command(1:total_keys))
+        allocate (keys(n), is_command(n))
+        n = 0
+        i = first
+        do k = 1, total_keys
+            if (include_cmds .or. .not. recent_is_command(i)) then
+                n = n + 1
+                keys(n) = recent_events(i)
+                is_command(n) = recent_is_command(i)
+            end if
+            i = i + 1
+            if (i > LOSSAGE_LIMIT) i = 1
+        end do
+    end subroutine recent_keys
+
+    !> Return the maximum number of keystrokes and commands recorded by
+    !> `recent_keys'.  Port of keyboard.c:Flossage_size (no ARG: the size
+    !> can't be changed yet).
+    integer function lossage_size()
+        lossage_size = LOSSAGE_LIMIT
+    end function lossage_size
 
     !> The next input event (read_event without recording it).
     subroutine read_event_1(ev, have, status)
@@ -1204,6 +1283,7 @@ contains
         call discard_input()
         call bitch_at_user(st)
         last_message = macroerror//format_error(status)
+        if (associated(message_log_hook)) call message_log_hook(last_message)
     end subroutine cmd_error
 
     !> Read one key sequence and run its command.  `done' at end of input
@@ -1252,6 +1332,8 @@ contains
         end if
         last_command_event = keys(size(keys))
         this_command_keys = keys
+        ! Execute the command: recorded in recent_keys as (nil . cmd).
+        call record_recent(cmd, .true.)
         this_command = cmd
         real_this_command = cmd
         ! pre-command-hook: a transient map lasts for one key sequence,

@@ -280,6 +280,11 @@ module fortmacs
                          shell_command_switch, shell_command_default_error_buffer, shell_command_prompt_show_cwd, &
                          shell_command_dont_erase_buffer, shell_command_buffer_name, DONT_ERASE_NIL, DONT_ERASE_ERASE, &
                          DONT_ERASE_BEG_LAST_OUT, DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT
+    use help_fns_fm, only: describe_mode, describe_symbol
+    use help_fm, only: describe_bindings, view_lossage, view_echo_area_messages
+    use xdisp_fm, only: message_log_max, MESSAGE_LOG_DISABLED, MESSAGE_LOG_UNLIMITED
+    use simple_fm, only: messages_buffer_mode_hook, messages_buffer_mode_map
+    use apropos_fm, only: apropos_mode_hook, apropos_mode_map
     implicit none(type, external)
     private
 
@@ -406,6 +411,9 @@ module fortmacs
     public :: kbd_macro_termination_hook, kmacro_ring_max, kmacro_execute_before_append, kmacro_repeat_no_prefix, &
               kmacro_call_repeat_key, kmacro_call_repeat_with_arg, KMACRO_CALL_REPEAT_DISABLED, &
               KMACRO_CALL_REPEAT_LAST_KEY, edmacro_eight_bits
+    public :: describe_mode, describe_symbol, describe_bindings, view_lossage, view_echo_area_messages, &
+              message_log_max, MESSAGE_LOG_DISABLED, MESSAGE_LOG_UNLIMITED, messages_buffer_mode_hook, &
+              messages_buffer_mode_map, apropos_mode_hook, apropos_mode_map
     public :: dired, dired_other_window, dired_noselect, dired_mode, dired_mode_map, dired_mode_hook, &
               dired_before_readin_hook, dired_after_readin_hook, dired_initial_position_hook, dired_listing_switches, &
               dired_use_ls_dired, DIRED_USE_LS_DIRED_NIL, DIRED_USE_LS_DIRED_T, DIRED_USE_LS_DIRED_UNSPECIFIED, &

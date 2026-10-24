@@ -82,6 +82,7 @@ module keymap_fm
               push_key_description
     public :: key_valid_p, keymap_set, keymap_global_set
     public :: where_is_internal, keymap_events, command_remapping
+    public :: accessible_keymaps, map_keymap_items, current_minor_maps
 
     !> Bind a key given as a `key_valid_p' string.  A character `command'
     !> names a command; otherwise it is any key definition.
@@ -154,8 +155,9 @@ module keymap_fm
     type(handle_type), allocatable :: minor_mode_maps(:)
     integer :: n_minor_mode_maps = 0
 
-    !> A key sequence and the keymap it leads to (where-is).
-    type :: key_list_type
+    !> A key sequence and the keymap it leads to (where-is,
+    !> `accessible_keymaps').
+    type, public :: key_list_type
         type(value_type), allocatable :: keys(:)
         type(handle_type) :: map
     end type key_list_type
@@ -1178,6 +1180,174 @@ contains
             return
         end do
     end function active_minor_mode_of_map
+
+    !> The keymaps of the enabled minor modes, in the order the active
+    !> maps have them, and their variables.  Port of
+    !> keymap.c:current_minor_maps (minor-mode-map-alist only).
+    subroutine current_minor_maps(modes, maps)
+        character(len=48), allocatable, intent(out) :: modes(:)
+        type(handle_type), allocatable, intent(out) :: maps(:)
+        type(value_type) :: v
+        type(status_type) :: st
+        integer :: i, n
+        allocate (modes(n_minor_mode_maps), maps(n_minor_mode_maps))
+        n = 0
+        do i = 1, n_minor_mode_maps
+            if (.not. table%is_live(minor_mode_maps(i))) cycle
+            call symbol_value(make_symbol_ref(minor_mode_vars(i)), v, st)
+            if (.not. st%ok()) cycle
+            if (nilp(v)) cycle
+            n = n + 1
+            modes(n) = symbols(minor_mode_vars(i))%name
+            maps(n) = minor_mode_maps(i)
+        end do
+        modes = modes(1:n)
+        maps = maps(1:n)
+    end subroutine current_minor_maps
+
+    !> The bindings of keymap `km' and its parents, in the order
+    !> map_keymap visits them: for each map, a full keymap's char-table
+    !> first, as runs of characters bound alike (an event FROM, or the
+    !> list (FROM TO) for a run), then the other entries, newest first.
+    !> Port of keymap.c:map_keymap (with map_keymap_internal and
+    !> map_keymap_char_table_item).
+    subroutine map_keymap_items(km, events, bindings)
+        type(handle_type), intent(in) :: km
+        type(value_type), allocatable, intent(out) :: events(:), bindings(:)
+        type(handle_type) :: map
+        integer(int64), allocatable :: run_from(:), run_to(:)
+        type(value_type), allocatable :: run_val(:)
+        integer, allocatable :: order(:)
+        type(value_type) :: ev
+        integer :: m, n
+        allocate (events(0), bindings(0))
+        map = km
+        do while (table%is_live(map))
+            associate (mp => keymaps(map%index))
+                if (mp%full) then
+                    call char_table_runs(mp, run_from, run_to, run_val)
+                    do m = 1, size(run_from)
+                        if (run_from(m) == run_to(m)) then
+                            ev = make_fixnum(run_from(m))
+                        else
+                            ev = list(make_fixnum(run_from(m)), make_fixnum(run_to(m)))
+                        end if
+                        call append_value(events, ev)
+                        call append_value(bindings, run_val(m))
+                    end do
+                end if
+                call entry_order(mp, order)
+                do m = 1, size(order)
+                    n = order(m)
+                    call append_value(events, mp%events(n))
+                    call append_value(bindings, mp%bindings(n))
+                end do
+                map = mp%parent
+            end associate
+        end do
+    end subroutine map_keymap_items
+
+    !> Find all keymaps accessible via prefix characters from KEYMAP.
+    !> Returns elements of the form (KEYS . MAP), where the sequence KEYS
+    !> starting from KEYMAP gets you to MAP.  These elements are ordered
+    !> so that the KEYS increase in length.  The first element is
+    !> ([] . KEYMAP).  An optional argument PREFIX, if present, should be a
+    !> key sequence; then the value includes only maps for prefixes that
+    !> start with PREFIX.  Port of keymap.c:Faccessible_keymaps (with
+    !> accessible_keymaps_1).
+    subroutine accessible_keymaps(keymap, maps, prefix)
+        type(handle_type), intent(in) :: keymap
+        type(key_list_type), allocatable, intent(out) :: maps(:)
+        type(value_type), intent(in), optional :: prefix(:)
+        type(key_list_type), allocatable :: trimmed(:)
+        type(value_type), allocatable :: events(:), bindings(:), thisseq(:), seq(:)
+        type(value_type) :: tem
+        type(status_type) :: st
+        type(handle_type) :: cmd
+        integer :: n, k, j, prefixlen, last
+        logical :: is_metized
+        allocate (maps(8))
+        n = 0
+        prefixlen = 0
+        if (present(prefix)) prefixlen = size(prefix)
+        if (prefixlen > 0) then
+            ! Start with the keymap (if any) for that prefix.
+            call lookup_key(make_keymap_ref(keymap), prefix, tem, st, accept_default=.true.)
+            if (.not. keymap_ref_p(tem)) then
+                deallocate (maps)
+                allocate (maps(0))
+                return
+            end if
+            call push(maps, n, prefix, xhandle(tem))
+        else
+            allocate (seq(0))
+            call push(maps, n, seq, keymap)
+        end if
+        k = 0
+        do while (k < n)
+            k = k + 1
+            thisseq = maps(k)%keys
+            last = size(thisseq)
+            ! Does the current sequence end in the meta-prefix-char?
+            is_metized = .false.
+            if (last >= 1 .and. last > prefixlen) then
+                if (fixnump(thisseq(last))) is_metized = xfixnum(thisseq(last)) == META_PREFIX_CHAR
+            end if
+            call map_keymap_items(maps(k)%map, events, bindings)
+            do j = 1, size(events)
+                if (.not. keymap_ref_p(bindings(j))) cycle
+                cmd = xhandle(bindings(j))
+                if (cycle_seen(cmd, thisseq)) cycle
+                if (is_metized .and. fixnump(events(j))) then
+                    ! Turn it into a meta-ized keystroke, right after this
+                    ! entry.
+                    seq = thisseq
+                    seq(last) = make_fixnum(ior(xfixnum(events(j)), M_META))
+                    call insert_after(k, seq, cmd)
+                else
+                    seq = [thisseq, events(j)]
+                    call push(maps, n, seq, cmd)
+                end if
+            end do
+        end do
+        allocate (trimmed(n))
+        do k = 1, n
+            trimmed(k) = maps(k)
+        end do
+        call move_alloc(trimmed, maps)
+    contains
+
+        !> Whether `map' is in the list with a prefix of `key' (a cycle).
+        logical function cycle_seen(map, key)
+            type(handle_type), intent(in) :: map
+            type(value_type), intent(in) :: key(:)
+            integer :: i, lim
+            cycle_seen = .false.
+            do i = 1, n
+                if (.not. same_handle(maps(i)%map, map)) cycle
+                lim = size(maps(i)%keys)
+                if (lim > size(key)) cycle
+                if (same_keys(maps(i)%keys, key(1:lim))) then
+                    cycle_seen = .true.
+                    return
+                end if
+            end do
+        end function cycle_seen
+
+        !> Insert (`keys', `map') after element `at' of the list.
+        subroutine insert_after(at, keys, map)
+            integer, intent(in) :: at
+            type(value_type), intent(in) :: keys(:)
+            type(handle_type), intent(in) :: map
+            integer :: i
+            call push(maps, n, keys, map)
+            do i = n, at + 2, -1
+                maps(i) = maps(i - 1)
+            end do
+            maps(at + 1)%keys = keys
+            maps(at + 1)%map = map
+        end subroutine insert_after
+    end subroutine accessible_keymaps
 
     !> The active keymaps, highest precedence first, as one composite:
     !> overriding-terminal-local-map, the minor-mode maps, the local map,

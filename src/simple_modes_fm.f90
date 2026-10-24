@@ -28,6 +28,9 @@ submodule(simple_fm) simple_modes_fm
     use subr_fm, only: run_mode_hooks
     use keymap_fm, only: keymap_set, define_key
     use modes_fm, only: major_modes, minor_modes
+    use buffer_fm, only: get_buffer, get_buffer_create, set_buffer, buffer_live_p, current_buffer
+    use xdisp_fm, only: messages_buffer_mode_function, message_log_echo, MESSAGES_BUFFER_NAME
+    use keyboard_fm, only: message_log_hook
     implicit none(type, external)
 
 contains
@@ -44,6 +47,28 @@ contains
     buffers(cur)%read_only = .true.
     call major_modes%special_mode%finish(saved, status)
     end procedure special_mode
+
+    module procedure messages_buffer_mode
+    logical :: saved
+    call major_modes%messages_buffer_mode%begin(saved, status)
+    if (.not. status%ok()) return
+    call major_modes%messages_buffer_mode%finish(saved, status)
+    end procedure messages_buffer_mode
+
+    module procedure messages_buffer
+    type(handle_type) :: old
+    type(status_type) :: st
+    buffer = get_buffer(MESSAGES_BUFFER_NAME)
+    status = status_type()
+    if (buffer_live_p(buffer)) return
+    old = current_buffer()
+    call get_buffer_create(MESSAGES_BUFFER_NAME, buffer, status)
+    if (.not. status%ok()) return
+    call set_buffer(buffer, status)
+    if (.not. status%ok()) return
+    call messages_buffer_mode(status)
+    if (buffer_live_p(old)) call set_buffer(old, st)
+    end procedure messages_buffer
 
     !> Toggle Transient Mark mode.
     !>
@@ -85,6 +110,14 @@ contains
     call major_modes%special_mode%define("special_mode", "Special", special_mode, special_mode_hook)
     special_mode_map = major_modes%special_mode%map
     major_modes%special_mode%special = .true.
+    call major_modes%messages_buffer_mode%define("messages_buffer_mode", "Messages", messages_buffer_mode, &
+                                                 messages_buffer_mode_hook, parent=major_modes%special_mode)
+    messages_buffer_mode_map = major_modes%messages_buffer_mode%map
+    ! :parent special-mode-map "g" nil: nothing to revert.
+    call keymap_set(messages_buffer_mode_map, "g", nil(), st)
+    commands%messages_buffer_mode%run => messages_buffer_mode
+    messages_buffer_mode_function => messages_buffer_mode
+    message_log_hook => message_log_echo
     call minor_modes%transient_mark_mode%define("transient_mark_mode", global=.true., &
                                                 variable="transient_mark_mode", hook=transient_mark_mode_hook)
     commands%transient_mark_mode%run => cmd_transient_mark_mode

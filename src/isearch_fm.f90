@@ -62,7 +62,7 @@ module isearch_fm
     use callint_fm, only: commandp, current_prefix_arg, prefix_numeric_value
     use subr_fm, only: add_to_history, history_delete_duplicates, defvar_nil
     use minibuf_fm, only: read_from_minibuffer, history_add_new_input, minibuf_level
-    use xdisp_fm, only: message
+    use xdisp_fm, only: message, message_nolog
     use dispnew_fm, only: ding
     use simple_fm, only: push_mark, current_kill
     implicit none(type, external)
@@ -773,7 +773,7 @@ contains
     !> isearch.el:isearch-message (no face on the failing part).
     subroutine isearch_message_show(c_q_hack, ellipsis)
         logical, intent(in), optional :: c_q_hack, ellipsis
-        call message(isearch_message_string(flag(c_q_hack), flag(ellipsis)))
+        call message_nolog(isearch_message_string(flag(c_q_hack), flag(ellipsis)))
     end subroutine isearch_message_show
 
     function isearch_message_string(c_q_hack, ellipsis) result(m)
@@ -1510,7 +1510,7 @@ contains
         character(len=:), allocatable :: m
         m = isearch_message_prefix(isearch_nonincremental)
         if (allocated(isearch_message)) m = m//isearch_text_description(isearch_message)
-        call message(m//" ["//string//"]")
+        call message_nolog(m//" ["//string//"]")
         call sit_for(1000)
     end subroutine isearch_momentary_message
 
@@ -1691,7 +1691,7 @@ contains
         type(value_type) :: ev
         logical :: have
         integer(int64) :: c
-        call message(isearch_message_string(.true.))
+        call message_nolog(isearch_message_string(.true.))
         call read_event(ev, have, status)
         if (.not. status%ok() .or. .not. have) return
         c = -1

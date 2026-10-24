@@ -920,6 +920,16 @@ contains
     end if
     end procedure local_variable_p
 
+    module procedure automatically_local_p
+    automatically_local_p = .false.
+    if (symbolp(variable)) automatically_local_p = auto_local(xsymbol(variable))
+    end procedure automatically_local_p
+
+    module procedure forwarded_variable_p
+    forwarded_variable_p = .false.
+    if (symbolp(variable)) forwarded_variable_p = resolve(xsymbol(variable)) > 0
+    end procedure forwarded_variable_p
+
     module procedure local_variable_if_set_p
     local_variable_if_set_p = local_variable_p(variable, buffer)
     if (.not. local_variable_if_set_p .and. symbolp(variable)) local_variable_if_set_p = auto_local(xsymbol(variable))

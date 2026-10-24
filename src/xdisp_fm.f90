@@ -102,6 +102,11 @@ module xdisp_fm
     use lisp_fm, only: value_type, nilp
     use lread_fm, only: sym
     use data_fm, only: buffer_local_value, integer_setting
+    use buffer_fm, only: get_buffer, get_buffer_create, set_buffer, buffer_live_p, temp_set_point_both, BEG, BEG_BYTE
+    use marker_fm, only: make_marker, set_marker, marker_position, free_marker
+    use insdel_fm, only: insert_1_both, del_range_both, inhibit_modification_hooks
+    use search_fm, only: scan_newline
+    use lisp_fm, only: command_proc
     implicit none(type, external)
     private
 
@@ -109,6 +114,32 @@ module xdisp_fm
     public :: redisplay, init_frame_windows, glyph_width, &
               mode_line_text, layout_window, message, glyph_columns, display_line_rows, display_row_of, &
               mode_line_row, recenter_start, mode_line_percent
+    public :: message_nolog, message_dolog, message_log_echo, message_log_maybe_newline
+
+    !> Values of `message_log_max' other than a number of lines.
+    integer(int64), parameter, public :: MESSAGE_LOG_DISABLED = -1, MESSAGE_LOG_UNLIMITED = -2
+
+    !> Maximum number of lines to keep in the message log buffer.
+    !> If MESSAGE_LOG_DISABLED, disable message logging.  If
+    !> MESSAGE_LOG_UNLIMITED, log messages but don't truncate the buffer
+    !> when it becomes large.  Port of xdisp.c message-log-max (named
+    !> constants for nil and t).
+    integer(int64), public :: message_log_max = 1000
+
+    !> The name of the buffer where messages are logged.  xdisp.c
+    !> messages-buffer-name.
+    character(len=*), parameter, public :: MESSAGES_BUFFER_NAME = "*Messages*"
+
+    !> The major mode `message_dolog' puts a new *Messages* buffer in
+    !> (simple.el's messages-buffer-mode, when it is defined); set by
+    !> simple_fm.
+    procedure(command_proc), pointer, public :: messages_buffer_mode_function => null()
+
+    !> xdisp.c:message_log_need_newline: the text last logged has no
+    !> newline after it yet.
+    logical :: message_log_need_newline = .false.
+
+    character(len=*), parameter :: LF = achar(10)
 
     !> List of functions to call to fontify regions of text.
     !> Each function is called with one argument POS.  Functions must
@@ -1959,12 +1990,43 @@ contains
     !> Show `text' in the echo area; an empty `text' clears it.  While the
     !> minibuffer is active the text goes after the minibuffer's contents
     !> instead, enclosed in [...] unless it already is, until the next
-    !> input event.  Port of editfns.c:Fmessage (with a plain string; no
-    !> *Messages* log yet) with xdisp.c:set_message and clear_message
-    !> calling minibuffer.el's set-minibuffer-message and
-    !> clear-minibuffer-message (set-message-functions,
-    !> clear-message-function).
-    subroutine message(text)
+    !> input event.  The text also goes into the *Messages* buffer
+    !> (`message_dolog'), if `message_log_max' allows.  Port of
+    !> editfns.c:Fmessage (with a plain string) with xdisp.c:message3,
+    !> set_message and clear_message calling minibuffer.el's
+    !> set-minibuffer-message and clear-minibuffer-message
+    !> (set-message-functions, clear-message-function).
+    recursive subroutine message(text)
+        character(len=*), intent(in) :: text
+        call message_log_maybe_newline()
+        if (len(text) > 0) call message_dolog(text, .true.)
+        call message_nolog(text)
+    end subroutine message
+
+    !> Log `text' in *Messages* as printing to the echo area does
+    !> (print.c:printchar with stream t): without a newline, which the
+    !> next message adds.  For the error messages of the command loop
+    !> (keyboard.c:Fcommand_error_default_function).
+    recursive subroutine message_log_echo(text)
+        character(len=*), intent(in) :: text
+        call message_log_maybe_newline()
+        call message_dolog(text, .false.)
+        message_log_need_newline = .true.
+    end subroutine message_log_echo
+
+    !> Start a new line in *Messages* if the last text logged was not
+    !> ended with one.  Port of xdisp.c:message_log_maybe_newline.
+    recursive subroutine message_log_maybe_newline()
+        if (.not. message_log_need_newline) return
+        message_log_need_newline = .false.
+        call message_dolog("", .true.)
+    end subroutine message_log_maybe_newline
+
+    !> Like `message', without logging the text in *Messages*: as
+    !> upstream's `message' with `message_log_max' bound to
+    !> MESSAGE_LOG_DISABLED, or the echo-area prompts of read-key-sequence.
+    !> Port of xdisp.c:message3_nolog.
+    subroutine message_nolog(text)
         character(len=*), intent(in) :: text
         if (len(text) == 0) then
             if (allocated(set_minibuffer_message_text)) deallocate (set_minibuffer_message_text)
@@ -1978,7 +2040,178 @@ contains
         else
             last_message = text
         end if
-    end subroutine message
+    end subroutine message_nolog
+
+    !> Add the string `text' to the end of the *Messages* buffer, then a
+    !> newline if `nlflag'.  A line that repeats the previous one is
+    !> combined with it into "LINE [N times]"; lines beyond
+    !> `message_log_max' are deleted from the beginning.  The buffer is
+    !> made on first use, in Messages Buffer mode
+    !> (`messages_buffer_mode_function', if set), with undo disabled.
+    !> Port of xdisp.c:message_dolog (multibyte text; no redisplay
+    !> bookkeeping).
+    recursive subroutine message_dolog(text, nlflag)
+        character(len=*), intent(in) :: text
+        logical, intent(in) :: nlflag
+        type(handle_type) :: oldbuf, buf, oldpoint, oldbegv, oldzv
+        type(status_type) :: st
+        integer(int64) :: this_bol, this_bol_byte, prev_bol, prev_bol_byte, dups, pos
+        logical :: newbuffer, point_at_end, zv_at_end, old_inhibit
+        character(len=24) :: dupstr
+        if (message_log_max == MESSAGE_LOG_DISABLED) return
+        oldbuf = current_buffer()
+        ! Ensure the Messages buffer exists, and switch to it.  If we
+        ! created it, set the major-mode.
+        newbuffer = .not. buffer_live_p(get_buffer(MESSAGES_BUFFER_NAME))
+        call get_buffer_create(MESSAGES_BUFFER_NAME, buf, st)
+        if (.not. st%ok()) return
+        call set_buffer(buf, st)
+        if (newbuffer .and. associated(messages_buffer_mode_function)) then
+            call messages_buffer_mode_function(st)
+            ! The mode's hooks may have switched buffers.
+            call set_buffer(buf, st)
+        end if
+        buffers(cur)%undo_enabled = .false.
+        call make_marker(oldpoint)
+        call make_marker(oldbegv)
+        call make_marker(oldzv)
+        call set_marker(oldpoint, buffers(cur)%pt, st)
+        call set_marker(oldbegv, buffers(cur)%begv, st)
+        call set_marker(oldzv, buffers(cur)%zv, st)
+        point_at_end = buffers(cur)%pt == buffers(cur)%text%z
+        zv_at_end = buffers(cur)%zv == buffers(cur)%text%z
+        buffers(cur)%begv = BEG
+        buffers(cur)%begv_byte = BEG_BYTE
+        buffers(cur)%zv = buffers(cur)%text%z
+        buffers(cur)%zv_byte = buffers(cur)%text%z_byte
+        call temp_set_point_both(buffers(cur), buffers(cur)%text%z, buffers(cur)%text%z_byte)
+        if (len(text) > 0) call insert_1_both(text, chars_in_text(text), len(text, int64), .true., .false., .false., st)
+        if (nlflag) then
+            ! Since we call del_range_both passing false for PREPARE, we
+            ! aren't prepared to run modification hooks.
+            old_inhibit = inhibit_modification_hooks%value
+            inhibit_modification_hooks%value = .true.
+            call insert_1_both(LF, 1_int64, 1_int64, .true., .false., .false., st)
+            call scan_newline(buffers(cur)%text%z, buffers(cur)%text%z_byte, BEG, BEG_BYTE, -2_int64)
+            this_bol = buffers(cur)%pt
+            this_bol_byte = buffers(cur)%pt_byte
+            ! See if this line duplicates the previous one.  If so,
+            ! combine duplicates.
+            if (this_bol > BEG) then
+                call scan_newline(buffers(cur)%pt, buffers(cur)%pt_byte, BEG, BEG_BYTE, -2_int64)
+                prev_bol = buffers(cur)%pt
+                prev_bol_byte = buffers(cur)%pt_byte
+                dups = message_log_check_duplicate(prev_bol_byte, this_bol_byte)
+                if (dups > 0) then
+                    call del_range_both(prev_bol, prev_bol_byte, this_bol, this_bol_byte, .false., st)
+                    if (dups > 1) then
+                        write (dupstr, "(a,i0,a)") " [", dups, " times]"
+                        call temp_set_point_both(buffers(cur), buffers(cur)%text%z - 1, buffers(cur)%text%z_byte - 1)
+                        call insert_1_both(trim(dupstr), len_trim(dupstr, int64), len_trim(dupstr, int64), &
+                                           .true., .false., .true., st)
+                    end if
+                end if
+            end if
+            ! If we have more than the desired maximum number of lines in
+            ! the *Messages* buffer now, delete the oldest ones.
+            if (message_log_max >= 0) then
+                call scan_newline(buffers(cur)%text%z, buffers(cur)%text%z_byte, BEG, BEG_BYTE, -message_log_max - 1)
+                call del_range_both(BEG, BEG_BYTE, buffers(cur)%pt, buffers(cur)%pt_byte, .false., st)
+            end if
+            inhibit_modification_hooks%value = old_inhibit
+        end if
+        call marker_position(oldbegv, pos, st)
+        buffers(cur)%begv = pos
+        buffers(cur)%begv_byte = buf_charpos_to_bytepos(cur, pos)
+        if (zv_at_end) then
+            buffers(cur)%zv = buffers(cur)%text%z
+            buffers(cur)%zv_byte = buffers(cur)%text%z_byte
+        else
+            call marker_position(oldzv, pos, st)
+            buffers(cur)%zv = pos
+            buffers(cur)%zv_byte = buf_charpos_to_bytepos(cur, pos)
+        end if
+        if (point_at_end) then
+            call temp_set_point_both(buffers(cur), buffers(cur)%text%z, buffers(cur)%text%z_byte)
+        else
+            call marker_position(oldpoint, pos, st)
+            call temp_set_point_both(buffers(cur), pos, buf_charpos_to_bytepos(cur, pos))
+        end if
+        call free_marker(oldpoint, st)
+        call free_marker(oldbegv, st)
+        call free_marker(oldzv, st)
+        if (buffer_live_p(oldbuf)) call set_buffer(oldbuf, st)
+    end subroutine message_dolog
+
+    !> The number of times the line of the *Messages* buffer before the
+    !> last one is repeated by the last (which starts at byte
+    !> `this_bol_byte'): 2 if the lines are the same, N + 1 if the
+    !> previous line is the same with " [N times]" after it, 1 if they
+    !> differ only after "..." in the previous one (a progress message),
+    !> else 0.  Port of xdisp.c:message_log_check_duplicate.
+    integer(int64) function message_log_check_duplicate(prev_bol_byte, this_bol_byte) result(dups)
+        integer(int64), intent(in) :: prev_bol_byte, this_bol_byte
+        integer(int64) :: i, n, k, length
+        logical :: seen_dots
+        character :: c1, c2
+        character(len=:), allocatable :: rest
+        dups = 0
+        length = buffers(cur)%text%z_byte - 1 - this_bol_byte
+        seen_dots = .false.
+        do i = 0, length - 1
+            if (i >= 3) then
+                if (byte_at(prev_bol_byte + i - 3) == "." .and. byte_at(prev_bol_byte + i - 2) == "." .and. &
+                    byte_at(prev_bol_byte + i - 1) == ".") seen_dots = .true.
+            end if
+            c1 = byte_at(prev_bol_byte + i)
+            c2 = byte_at(this_bol_byte + i)
+            if (c1 /= c2) then
+                if (seen_dots) dups = 1
+                return
+            end if
+        end do
+        k = prev_bol_byte + length
+        if (byte_at(k) == LF) then
+            dups = 2
+            return
+        end if
+        if (byte_at(k) /= " ") return
+        if (byte_at(k + 1) /= "[") return
+        ! strtoimax: the digits after "[", then " times]\n".
+        rest = ""
+        i = k + 2
+        do while (i < buffers(cur)%text%z_byte)
+            if (byte_at(i) == LF) exit
+            rest = rest//byte_at(i)
+            i = i + 1
+        end do
+        n = verify(rest, "0123456789") - 1
+        if (n <= 0 .or. n > 18) return
+        if (rest(n + 1:) /= " times]") return
+        read (rest(1:n), *) dups
+        if (dups > 0) then
+            dups = dups + 1
+        else
+            dups = 0
+        end if
+    end function message_log_check_duplicate
+
+    !> The byte at byte position `pos' of the current buffer.
+    character function byte_at(pos)
+        integer(int64), intent(in) :: pos
+        byte_at = char(buf_fetch_byte(buffers(cur), pos))
+    end function byte_at
+
+    !> The number of characters in the UTF-8 (internal encoding) `text'.
+    integer(int64) function chars_in_text(text) result(n)
+        character(len=*), intent(in) :: text
+        integer :: k
+        n = 0
+        do k = 1, len(text)
+            ! Count the bytes that start a character.
+            if (iand(ichar(text(k:k), kind=int32), 192_int32) /= 128_int32) n = n + 1
+        end do
+    end function chars_in_text
 
     !> Whether `text' matches "\` *\[.+\]\'".
     pure logical function bracketed_message_p(text) result(p)

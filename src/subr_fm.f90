@@ -38,7 +38,7 @@ module subr_fm
     use dispnew_fm, only: ding
     use commands_fm, only: commands
     use callint_fm, only: prefix_arg
-    use xdisp_fm, only: message, cursor_in_echo_area
+    use xdisp_fm, only: message, message_nolog, cursor_in_echo_area
     use keymap_fm, only: define_key, current_global_map, key_description, make_sparse_keymap, keymap_live_p, &
                          key_parse, lookup_key
     use handle_fm, only: handle_type
@@ -336,7 +336,7 @@ contains
         type(value_type), intent(out) :: key
         type(status_type), intent(out) :: status
         logical :: have
-        call message(prompt)
+        call message_nolog(prompt)
         cursor_in_echo_area = .true.
         call read_event(key, have, status)
         cursor_in_echo_area = .false.

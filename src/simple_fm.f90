@@ -104,7 +104,8 @@ module simple_fm
     procedure(redisplay_proc), pointer, public :: kmacro_keyboard_quit_hook => null()
 
     public :: execute_extended_command, read_extended_command
-    public :: fundamental_mode, special_mode, syms_of_simple_modes
+    public :: fundamental_mode, special_mode, syms_of_simple_modes, messages_buffer_mode, messages_buffer
+    public :: set_variable
     public :: read_shell_command, shell_command, shell_command_on_region, display_message_or_buffer, &
               syms_of_simple_shell
 
@@ -247,6 +248,13 @@ module simple_fm
 
     !> Keymap for `special_mode'.  Port of simple.el special-mode-map.
     type(handle_type), public :: special_mode_map
+
+    !> Hook run after entering Messages mode (`messages_buffer_mode_hook').
+    type(hook_type), target, public :: messages_buffer_mode_hook = hook_type(name="messages_buffer_mode_hook")
+
+    !> Keymap for `messages_buffer_mode'.  Port of simple.el
+    !> messages-buffer-mode-map.
+    type(handle_type), public :: messages_buffer_mode_map
 
     !> Hook run after entering or leaving `transient_mark_mode'.
     type(hook_type), target, public :: transient_mark_mode_hook = hook_type(name="transient_mark_mode_hook")
@@ -400,6 +408,55 @@ module simple_fm
             implicit none(type, external)
             type(status_type), intent(out) :: status
         end subroutine special_mode
+
+        !> Major mode used in the "*Messages*" buffer.  Port of
+        !> simple.el:messages-buffer-mode (`window_point_insertion_type'
+        !> is not ported: windows showing the buffer don't follow its
+        !> end).  (In simple_modes_fm.)
+        module subroutine messages_buffer_mode(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine messages_buffer_mode
+
+        !> Return the "*Messages*" buffer.
+        !> If it does not exist, create it and switch it to
+        !> `messages_buffer_mode'.  Port of simple.el:messages-buffer.
+        !> (In simple_modes_fm.)
+        module subroutine messages_buffer(buffer, status)
+            implicit none(type, external)
+            type(handle_type), intent(out) :: buffer
+            type(status_type), intent(out) :: status
+        end subroutine messages_buffer
+
+        !> Set VARIABLE to VALUE.  VALUE is a Fortran literal of the
+        !> variable's type.  VARIABLE should be a user option variable name,
+        !> a variable meant to be customized by users.  You should enter
+        !> VALUE in Fortran syntax, so if you want VALUE to be a string, you
+        !> must surround it with doublequotes.  VALUE is used literally, not
+        !> evaluated.
+        !>
+        !> The type of VARIABLE is used to check that VALUE is valid.
+        !>
+        !> With a prefix argument, set VARIABLE to VALUE buffer-locally.
+        !>
+        !> When called interactively, the user is prompted for VARIABLE and
+        !> then VALUE.  The current value of VARIABLE will be put in the
+        !> minibuffer history so that it can be accessed with \`M-n', which
+        !> makes it easier to edit it.  Port of simple.el:set-variable (see
+        !> simple_setvar_fm for what is read).  (In simple_setvar_fm.)
+        module subroutine set_variable(variable, value, make_local, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: variable, value
+            logical, intent(in) :: make_local
+            type(status_type), intent(out) :: status
+        end subroutine set_variable
+
+        !> Set VARIABLE to VALUE, read in the minibuffer.  Port of
+        !> simple.el:set-variable (the command).  (In simple_setvar_fm.)
+        recursive module subroutine cmd_set_variable(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine cmd_set_variable
 
         !> Define `fundamental_mode' and `special_mode' (with
         !> `special_mode_map'); safe to call again.  (In simple_modes_fm.)
@@ -1863,6 +1920,12 @@ contains
                                  cycle_spacing_action_type(CYCLE_DELETE_ALL_SPACE), &
                                  cycle_spacing_action_type(CYCLE_RESTORE)]
         commands%mark_word%run => cmd_mark_word
+        commands%set_variable%run => cmd_set_variable
+        ! simple.el set-variable-value-history and custom.el
+        ! custom-variable-history: the minibuffer histories of
+        ! `set_variable'.
+        call defvar_nil("set_variable_value_history")
+        call defvar_nil("custom_variable_history")
     end subroutine syms_of_simple
 
     ! ------------------------------------------------------------------

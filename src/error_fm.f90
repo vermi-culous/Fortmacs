@@ -72,8 +72,12 @@ module error_fm
     !> the end of the obstacle, printed as print_error_message prints them
     !> ("\"Unbalanced parentheses\", 3, 9").
     integer(int32), parameter, public :: FM_SCAN_ERROR = 25
+    !> lread.c's `end-of-file' and `invalid-read-syntax' (reading a value
+    !> typed in the minibuffer: `set_variable').
+    integer(int32), parameter, public :: FM_END_OF_FILE = 26
+    integer(int32), parameter, public :: FM_INVALID_READ_SYNTAX = 27
 
-    integer(int32), parameter :: last_code = FM_SCAN_ERROR
+    integer(int32), parameter :: last_code = FM_INVALID_READ_SYNTAX
     integer, parameter :: name_len = 24, msg_len = 40
 
     !> `error_conditions' symbol names, indexed by code.
@@ -87,7 +91,8 @@ module error_fm
                                                                 "file_error", "memory_full", "invalid_handle", &
                                                                 "void_function", "file_missing", &
                                                                 "file_already_exists", "mark_inactive", "search_failed", &
-                                                                "invalid_regexp", "permission_denied", "scan_error"]
+                                                                "invalid_regexp", "permission_denied", "scan_error", &
+                                                                "end_of_file", "invalid_read_syntax"]
 
     !> `error_message' strings, indexed by code.
     character(len=msg_len), parameter :: messages(0:last_code) = [character(len=msg_len) :: &
@@ -105,7 +110,8 @@ module error_fm
                                                                   "File is missing", "File already exists", &
                                                                   "The mark is not active now", "Search failed", &
                                                                   "Invalid regexp", "Cannot access file or directory", &
-                                                                  "Scan error"]
+                                                                  "Scan error", "End of file during parsing", &
+                                                                  "Invalid read syntax"]
 
     !> Parent condition of each code (the next element of its
     !> `error_conditions' list); -1 ends the chain.  `quit' is deliberately
@@ -119,7 +125,8 @@ module error_fm
                                  FM_GENERIC_ERROR, FM_BUFFER_READ_ONLY, &
                                  FM_GENERIC_ERROR, FM_GENERIC_ERROR, FM_GENERIC_ERROR, &
                                  FM_GENERIC_ERROR, FM_FILE_ERROR, FM_FILE_ERROR, FM_GENERIC_ERROR, &
-                                 FM_GENERIC_ERROR, FM_GENERIC_ERROR, FM_FILE_ERROR, FM_GENERIC_ERROR]
+                                 FM_GENERIC_ERROR, FM_GENERIC_ERROR, FM_FILE_ERROR, FM_GENERIC_ERROR, &
+                                 FM_GENERIC_ERROR, FM_GENERIC_ERROR]
 
     !> Outcome of a fallible operation.  `detail' plays the role of the
     !> signal's DATA (e.g. the offending arguments).

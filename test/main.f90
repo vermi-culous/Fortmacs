@@ -26,6 +26,8 @@ program tester
                          testsuite_type, select_suite
     use test_version_fm, only: collect_version_fm
     use test_help_fm, only: collect_help_fm
+    use test_apropos_fm, only: collect_apropos_fm
+    use test_simple_setvar_fm, only: collect_simple_setvar_fm
     use test_syntax_fm, only: collect_syntax_fm
     use test_syntax_scan_fm, only: collect_syntax_scan_fm
     use test_font_lock_fm, only: collect_font_lock_fm
@@ -136,6 +138,8 @@ program tester
                  new_testsuite("undo_fm", collect_undo_fm), &
                  new_testsuite("simple_fm", collect_simple_fm), &
                  new_testsuite("help_fm", collect_help_fm), &
+                 new_testsuite("apropos_fm", collect_apropos_fm), &
+                 new_testsuite("simple_setvar_fm", collect_simple_setvar_fm), &
                  new_testsuite("syntax_fm", collect_syntax_fm), &
                  new_testsuite("syntax_scan_fm", collect_syntax_scan_fm), &
                  new_testsuite("paragraphs_fm", collect_paragraphs_fm), &
