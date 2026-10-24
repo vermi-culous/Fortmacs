@@ -28,20 +28,18 @@
 !> `insert_directory' (files.el), which runs `insert_directory_program'
 !> with `dired_listing_switches' and "--dired" so the file names are
 !> known exactly.  Named `dired_mode_fm' because dired.c is `dired_fm'.
-!> The commands of dired-aux.el that Dired needs are in the submodule
-!> dired_aux_fm.
+!> dired-aux.el (the operations on marked files) is in the submodule
+!> dired_aux_fm; its options are declared here.
 !>
 !> Deferred: a list of files as the directory argument (a cons
 !> `dired_directory'), inserted subdirectories (`i', `dired_insert_subdir',
 !> `$' hiding, `dired_switches_alist', `dired_subdir_switches'),
 !> `dired_hide_details_mode' and its options (the `invisible' properties
-!> are set, but redisplay shows invisible text), `dired_view_file' (`v':
-!> needs view-mode), `dired_find_alternate_file' (`a') and
-!> `dired_kill_when_opening_new_dired_buffer', the file operations of
-!> dired-aux.el (`C', `R', `H', `S', `Y', `M', `G', `O', `T', `Z', `c',
-!> `P', `!', `&', `X', `=', `A', `Q', `k', `y', `w' with a prefix of 1
-!> (project.el), `% u', `% l', `% r'...), the query of
-!> `dired_unmark_all_files' with a prefix argument (`dired_query'),
+!> are set, but redisplay shows invisible text), `dired_find_alternate_file'
+!> (`a') and `dired_kill_when_opening_new_dired_buffer', the dired-aux.el
+!> commands listed as deferred in dired_aux_fm (`P', `!', `&', `X', `E',
+!> `=', `A', `Q', `.'), `dired_toggle_read_only' (wdired; C-x C-q runs
+!> `read_only_mode'), `w' with a prefix of 1 (project.el),
 !> `dired_auto_revert_buffer' as a function, `dired_movement_style' t,
 !> mouse, drag-and-drop and click-to-select, `dired_make_directory_clickable'
 !> (keymaps in text properties), the warning about file names with
@@ -148,7 +146,16 @@ module dired_mode_fm
     ! Used by the dired_aux_fm submodule (gfortran drops private parent
     ! procedures that submodules call).
     public :: dired_goto_next_nontrivial_file, dired_map_over_marks, dired_mark_files_in_region, dired_next_subdir, &
-              dired_subdir_max, dired_mark_1
+              dired_subdir_max, dired_mark_1, dired_log, dired_log_summary, dired_in_this_tree_p, dired_normalize_subdir, &
+              dired_get_file_for_visit, dired_advertise, temp_buffer_window_setup, insert_marked_files, fit_window
+    public :: dired_do_chmod, dired_do_chgrp, dired_do_chown, dired_do_touch, dired_kill_line, dired_do_kill_lines, &
+              dired_compress_file, dired_do_compress, dired_do_compress_to, dired_remove_file, dired_relist_file, &
+              dired_query, dired_copy_file, dired_copy_file_recursive, dired_rename_file, dired_hardlink, &
+              dired_make_relative_symlink, dired_create_files, dired_do_create_files, dired_do_copy, dired_do_symlink, &
+              dired_do_relsymlink, dired_do_hardlink, dired_do_rename, dired_do_rename_regexp, dired_do_copy_regexp, &
+              dired_do_hardlink_regexp, dired_do_symlink_regexp, dired_do_relsymlink_regexp, dired_upcase, &
+              dired_downcase, dired_create_empty_file, dired_view_file, dired_show_file_type, dired_file_creator_proc, &
+              dired_name_constructor_proc
 
     ! ------------------------------------------------------------------
     ! Options
@@ -372,6 +379,229 @@ module dired_mode_fm
     !> The buffer where Dired logs its errors.  Port of dired.el
     !> dired-log-buffer.
     character(len=*), parameter, public :: dired_log_buffer = "*Dired log*"
+
+    !> Name of chown command (usually `chown').  Port of dired.el
+    !> dired-chown-program.
+    character(len=:), allocatable, public :: dired_chown_program
+
+    !> Name of touch command (usually `touch').  Port of dired.el
+    !> dired-touch-program.
+    character(len=:), allocatable, public :: dired_touch_program
+
+    !> The value of the `dired_keep_marker_*' options that keeps the
+    !> marks (upstream t).
+    character, parameter, public :: DIRED_KEEP_MARKER = achar(0)
+
+    !> Controls marking of renamed files.
+    !> If DIRED_KEEP_MARKER, files keep their previous marks when they are renamed.
+    !> If a character, renamed files (whether previously marked or not)
+    !> are afterward marked with that character.
+    !> This option affects only files renamed by `dired_do_rename' and
+    !> `dired_do_rename_regexp'.  Port of dired.el dired-keep-marker-rename.
+    character, public :: dired_keep_marker_rename = DIRED_KEEP_MARKER
+
+    !> Controls marking of copied files.
+    !> If DIRED_KEEP_MARKER, copied files are marked if and as the corresponding original files were.
+    !> If a character, copied files are unconditionally marked with that character.
+    !> Port of dired.el dired-keep-marker-copy.
+    character, public :: dired_keep_marker_copy = "C"
+
+    !> Controls marking of newly made hard links.
+    !> If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked.
+    !> If a character, new links are unconditionally marked with that character.
+    !> Port of dired.el dired-keep-marker-hardlink.
+    character, public :: dired_keep_marker_hardlink = "H"
+
+    !> Controls marking of newly made symbolic links.
+    !> If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked.
+    !> If a character, new links are unconditionally marked with that character.
+    !> Port of dired.el dired-keep-marker-symlink.
+    character, public :: dired_keep_marker_symlink = "Y"
+
+    !> Controls marking of newly made relative symbolic links.
+    !> If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked.
+    !> If a character, new links are unconditionally marked with that character.
+    !> Port of dired.el dired-keep-marker-relsymlink.
+    character, public :: dired_keep_marker_relsymlink = "S"
+
+    !> If true, Dired preserves the last-modified time in a file copy.
+    !> (This works on only some systems.)  Port of dired.el
+    !> dired-copy-preserve-time.
+    logical, public :: dired_copy_preserve_time = .true.
+
+    !> If true, Dired dereferences symlinks when copying them.
+    !> This is similar to the "-L" option for the "cp" shell command.
+    !> Port of dired.el dired-copy-dereference.
+    logical, public :: dired_copy_dereference = .false.
+
+    !> Whether Dired copies directories recursively.
+    !> If DIRED_RECURSIVE_NEVER, never copy recursively.
+    !> DIRED_RECURSIVE_ALWAYS means to copy recursively without asking.
+    !> DIRED_RECURSIVE_TOP means to ask for each directory at top level.
+    !> DIRED_RECURSIVE_ASK means to ask for each directory.  Port of
+    !> dired.el dired-recursive-copies.
+    integer, public :: dired_recursive_copies = DIRED_RECURSIVE_TOP
+
+    !> Values of `dired_dwim_target' (upstream nil, t or
+    !> dired-dwim-target-next, dired-dwim-target-next-visible and
+    !> dired-dwim-target-recent).
+    integer, parameter, public :: DIRED_DWIM_TARGET_NIL = 0, DIRED_DWIM_TARGET_NEXT = 1, &
+                                  DIRED_DWIM_TARGET_NEXT_VISIBLE = 2, DIRED_DWIM_TARGET_RECENT = 3
+
+    !> If set, Dired tries to guess a default target directory.
+    !> This means: if there is a Dired buffer displayed in some window,
+    !> use its current directory, instead of this Dired buffer's
+    !> current directory.
+    !>
+    !> You can set it to prefer either the next window with a Dired buffer
+    !> (DIRED_DWIM_TARGET_NEXT, or DIRED_DWIM_TARGET_NEXT_VISIBLE on
+    !> visible frames), or the most recently used window with a Dired
+    !> buffer (DIRED_DWIM_TARGET_RECENT).
+    !>
+    !> The target is used in the prompt for file copy, rename etc.  Port
+    !> of dired.el dired-dwim-target (a function as the value is
+    !> deferred).
+    integer, public :: dired_dwim_target = DIRED_DWIM_TARGET_NIL
+
+    !> Values of `dired_create_destination_dirs' (upstream nil, `always'
+    !> and `ask').
+    integer, parameter, public :: DIRED_CREATE_DESTINATION_DIRS_NIL = 0, DIRED_CREATE_DESTINATION_DIRS_ALWAYS = 1, &
+                                  DIRED_CREATE_DESTINATION_DIRS_ASK = 2
+
+    !> Whether Dired should create destination dirs when copying/moving files.
+    !> If DIRED_CREATE_DESTINATION_DIRS_NIL, don't create non-existent destination directories.
+    !> If DIRED_CREATE_DESTINATION_DIRS_ASK, ask the user whether to create them.
+    !> If DIRED_CREATE_DESTINATION_DIRS_ALWAYS, create them without asking.
+    !>
+    !> Also see `dired_create_destination_dirs_on_trailing_dirsep'.  Port
+    !> of dired-aux.el dired-create-destination-dirs.
+    integer, public :: dired_create_destination_dirs = DIRED_CREATE_DESTINATION_DIRS_NIL
+
+    !> If true, consider a file name ending in a slash as a directory to create.
+    !>
+    !> If this variable is true and a single destination file name of
+    !> a Dired command ends in a directory separator (/), that file name
+    !> will be treated as a non-existent directory, and that directory
+    !> will be created if the variable `dired_create_destination_dirs'
+    !> says so.
+    !>
+    !> For example, if both `dired_create_destination_dirs' and this
+    !> option are set, renaming a directory named `old_name' to
+    !> `new_name/' (note the trailing directory separator) will
+    !> create `new_name' if it does not already exist, and will
+    !> move `old_name' into it.  By contrast, if only `new_name'
+    !> (without the trailing /) is given, or this option or
+    !> `dired_create_destination_dirs' is not set, `old_name' will be
+    !> renamed to `new_name'.  Port of dired-aux.el
+    !> dired-create-destination-dirs-on-trailing-dirsep.
+    logical, public :: dired_create_destination_dirs_on_trailing_dirsep = .false.
+
+    !> Automatically revert Dired buffers after `dired_do' operations.
+    !> This option controls whether to refresh the directory listing in a
+    !> Dired buffer that is the destination of one of these operations:
+    !> `dired_do_copy', `dired_do_rename', `dired_do_symlink', `dired_do_hardlink'.
+    !> If the value is true, always revert the Dired buffer updated in the result
+    !> of these operations.  Port of dired-aux.el dired-do-revert-buffer
+    !> (a function as the value is deferred).
+    logical, public :: dired_do_revert_buffer = .false.
+
+    !> Whether `dired_create_empty_file' acts on the current directory.
+    !> If true, `dired_create_empty_file' creates a new empty file and adds
+    !> an entry for it (or its topmost new parent directory if created) under
+    !> the current subdirectory in the Dired buffer by default (otherwise, it
+    !> adds the new file (and new subdirectories if provided) to whichever
+    !> directory the user enters at the prompt).  If false,
+    !> `dired_create_empty_file' acts on the default directory by default.
+    !> Port of dired-aux.el dired-create-empty-file-in-current-directory.
+    logical, public :: dired_create_empty_file_in_current_directory = .false.
+
+    !> Default suffix for compressing a single file.
+    !> If empty, ".gz" will be used.  Port of dired-aux.el
+    !> dired-compress-file-default-suffix.
+    character(len=:), allocatable, public :: dired_compress_file_default_suffix
+
+    !> Default suffix for compressing a directory.
+    !> If empty, ".tar.gz" will be used.  Port of dired-aux.el
+    !> dired-compress-directory-default-suffix.
+    character(len=:), allocatable, public :: dired_compress_directory_default_suffix
+
+    !> A rule of `dired_compress_file_suffixes': (REGEXP NEW-SUFFIX
+    !> PROGRAM), PROGRAM empty for nil.
+    type, public :: dired_compress_suffix_type
+        character(len=:), allocatable :: regexp, new_suffix, program
+    end type dired_compress_suffix_type
+
+    !> A rule (REGEXP . CMD) of `dired_compress_file_alist' and
+    !> `dired_compress_files_alist'.
+    type, public :: dired_compress_rule_type
+        character(len=:), allocatable :: regexp, command
+    end type dired_compress_rule_type
+
+    !> Control changes in file name suffixes for compression and uncompression.
+    !> Each element specifies one transformation rule, and has the form:
+    !>   (REGEXP NEW-SUFFIX PROGRAM)
+    !> The rule applies when the old file name matches REGEXP.
+    !> The new file name is computed by deleting the part that matches REGEXP
+    !>  (as well as anything after that), then adding NEW-SUFFIX in its place.
+    !> If PROGRAM is not empty, the rule is an uncompression rule,
+    !> and uncompression is done by running PROGRAM.
+    !>
+    !> Within PROGRAM, %i denotes the input file, and %o denotes the
+    !> output file.
+    !>
+    !> Otherwise, the rule is a compression rule, and compression is done with gzip.
+    !> ARGS are command switches passed to PROGRAM.  Port of dired-aux.el
+    !> dired-compress-file-suffixes.
+    type(dired_compress_suffix_type), allocatable, public :: dired_compress_file_suffixes(:)
+
+    !> Controls the compression shell command for `dired_do_compress_to'.
+    !>
+    !> Each element is (REGEXP . CMD), where REGEXP is the name of the
+    !> archive to which you want to compress, and CMD is the
+    !> corresponding command.
+    !>
+    !> Within CMD, %i denotes the input file(s), and %o denotes the
+    !> output file.  %i path(s) are relative, while %o is absolute.  Port
+    !> of dired-aux.el dired-compress-file-alist.
+    type(dired_compress_rule_type), allocatable, public :: dired_compress_file_alist(:)
+
+    !> Controls the compression shell command for `dired_do_compress_to'.
+    !>
+    !> Each element is (REGEXP . CMD), where REGEXP is the name of the
+    !> archive to which you want to compress, and CMD is the
+    !> corresponding command.
+    !>
+    !> Within CMD, %i denotes the input file(s), and %o denotes the
+    !> output file.  %i path(s) are relative, while %o is absolute.  Port
+    !> of dired-aux.el dired-compress-files-alist.
+    type(dired_compress_rule_type), allocatable, public :: dired_compress_files_alist(:)
+
+    !> What a file creator of `dired_create_files' is, for its special
+    !> cases: `dired_copy_file', `make_symbolic_link' or another.
+    integer, parameter, public :: DIRED_CREATOR_OTHER = 0, DIRED_CREATOR_COPY = 1, DIRED_CREATOR_SYMLINK = 2
+
+    abstract interface
+        !> A FILE-CREATOR of `dired_create_files': create TO from FROM,
+        !> overwriting TO if OK_FLAG.
+        recursive subroutine dired_file_creator_proc(from, to, ok_flag, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: from, to
+            logical, intent(in) :: ok_flag
+            type(status_type), intent(out) :: status
+        end subroutine dired_file_creator_proc
+
+        !> A NAME-CONSTRUCTOR of `dired_create_files': the new file name TO
+        !> for FROM, or SKIP true to skip it (upstream nil).
+        recursive subroutine dired_name_constructor_proc(from, to, skip, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: from
+            character(len=:), allocatable, intent(out) :: to
+            logical, intent(out) :: skip
+            type(status_type), intent(out) :: status
+        end subroutine dired_name_constructor_proc
+    end interface
 
     abstract interface
         !> A `dired_deletion_confirmer': ask PROMPT, ANSWER true for yes.
@@ -710,6 +940,455 @@ module dired_mode_fm
             logical, intent(in), optional :: no_error_if_not_found, no_skip
             integer(int64) :: pos
         end function dired_prev_subdir
+
+        !> Change the mode of the marked (or next ARG) files.
+        !> Both octal numeric modes like `644' and symbolic modes like `g+w'
+        !> are supported.  Port of dired-aux.el:dired-do-chmod.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_do_chmod(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_chmod
+
+        !> Change the group of the marked (or next ARG) files.  Port of
+        !> dired-aux.el:dired-do-chgrp.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_chgrp(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_chgrp
+
+        !> Change the owner of the marked (or next ARG) files.  Port of
+        !> dired-aux.el:dired-do-chown.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_chown(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_chown
+
+        !> Change the timestamp of the marked (or next ARG) files.
+        !> This calls touch.  Port of dired-aux.el:dired-do-touch.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_do_touch(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_touch
+
+        !> Kill the current line (not the files).
+        !> Kill ARG lines starting with the current line.
+        !> (A negative argument kills backward.)  Port of
+        !> dired-aux.el:dired-kill-line.  (In dired_aux_fm.)
+        recursive module subroutine dired_kill_line(arg, status)
+            implicit none(type, external)
+            integer(int64), intent(in) :: arg
+            type(status_type), intent(out) :: status
+        end subroutine dired_kill_line
+
+        !> Remove all marked lines, or the next ARG lines.
+        !> The files or directories on those lines are _not_ deleted.  Only the
+        !> Dired listing is affected.
+        !>
+        !> INIT_COUNT is added to the number of lines removed by this
+        !> invocation, for the reporting message; COUNT is that number.
+        !>
+        !> A FMT of "" will suppress the messaging.  Port of
+        !> dired-aux.el:dired-do-kill-lines.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_kill_lines(arg_kind, arg_n, status, fmt, init_count, count)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+            character(len=*), intent(in), optional :: fmt
+            integer(int64), intent(in), optional :: init_count
+            integer(int64), intent(out), optional :: count
+        end subroutine dired_do_kill_lines
+
+        !> Compress or uncompress FILE.
+        !> NEWNAME is the name of the compressed or uncompressed file;
+        !> FOUND is false if there was no change in files.  Port of
+        !> dired-aux.el:dired-compress-file.  (In dired_aux_fm.)
+        recursive module subroutine dired_compress_file(file, newname, found, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+            character(len=:), allocatable, intent(out) :: newname
+            logical, intent(out) :: found
+            type(status_type), intent(out) :: status
+        end subroutine dired_compress_file
+
+        !> Compress or uncompress marked (or next ARG) files.
+        !> If invoked on a directory, compress all of the files in
+        !> the directory and all of its subdirectories, recursively,
+        !> into a .tar.gz archive.
+        !> If invoked on a .tar.gz or a .tgz or a .zip or a .7z archive,
+        !> uncompress and unpack all the files in the archive.
+        !>
+        !> If ARG_KIND is DIRED_ARG_MARKED, compress only the marked files,
+        !> or none if no files are marked.  Port of
+        !> dired-aux.el:dired-do-compress.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_compress(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_compress
+
+        !> Compress selected files and directories to an archive.
+        !> Prompt for the archive file name.
+        !> Choose the archiving command based on the archive file-name extension
+        !> and `dired_compress_files_alist'.  Port of
+        !> dired-aux.el:dired-do-compress-to.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_compress_to(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_compress_to
+
+        !> Remove entry FILE on each Dired buffer.
+        !> Note this doesn't delete FILE in the file system.
+        !> See `dired_delete_file' in case you wish that.  Port of
+        !> dired-aux.el:dired-remove-file.  (In dired_aux_fm.)
+        module subroutine dired_remove_file(file)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+        end subroutine dired_remove_file
+
+        !> Create or update the line for FILE in all Dired buffers it would
+        !> belong in.  Port of dired-aux.el:dired-relist-file.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_relist_file(file, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+            type(status_type), intent(out) :: status
+        end subroutine dired_relist_file
+
+        !> Query user with PROMPT, and store the answer in STATE.
+        !> ANSWER is false or true.
+        !>
+        !> The user may type y or SPC to accept once; n or DEL to skip once;
+        !> ! to accept this and subsequent queries; or q or ESC to decline
+        !> this and subsequent queries.
+        !>
+        !> If STATE already holds an answer (it starts as 0), this function
+        !> may return automatically without querying the user.  If STATE
+        !> is !, ANSWER is true; if STATE is q or ESC, false.  HELP_FORM is
+        !> what the help character shows.  Port of dired-aux.el:dired-query.
+        !> (In dired_aux_fm.)
+        recursive module subroutine dired_query(state, prompt, answer, status, help_form)
+            implicit none(type, external)
+            integer, intent(inout) :: state
+            character(len=*), intent(in) :: prompt
+            logical, intent(out) :: answer
+            type(status_type), intent(out) :: status
+            character(len=*), intent(in), optional :: help_form
+        end subroutine dired_query
+
+        !> Copy FROM to TO, overwriting it if OK_FLAG, as Dired's file
+        !> creator for copying.  Port of dired-aux.el:dired-copy-file.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_copy_file(from, to, ok_flag, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: from, to
+            logical, intent(in) :: ok_flag
+            type(status_type), intent(out) :: status
+        end subroutine dired_copy_file
+
+        !> Copy FROM to TO; a directory with `copy_directory' when RECURSIVE
+        !> (a `dired_recursive_copies' value) says so, a symbolic link as a
+        !> link unless DEREFERENCE.  PRESERVE_TIME keeps the modification
+        !> time; TOP says FROM is a top-level file of the operation.  Port of
+        !> dired-aux.el:dired-copy-file-recursive.  (In dired_aux_fm.)
+        recursive module subroutine dired_copy_file_recursive(from, to, ok_flag, status, preserve_time, top, recursive, &
+                                                              dereference)
+            implicit none(type, external)
+            character(len=*), intent(in) :: from, to
+            logical, intent(in) :: ok_flag
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: preserve_time, top, dereference
+            integer, intent(in), optional :: recursive
+        end subroutine dired_copy_file_recursive
+
+        !> Rename FILE to NEWNAME.
+        !> Signal a `file_already_exists' error if a file NEWNAME already exists
+        !> unless OK_IF_ALREADY_EXISTS is true.  Port of
+        !> dired-aux.el:dired-rename-file (`dired_vc_rename_file' is
+        !> deferred).  (In dired_aux_fm.)
+        recursive module subroutine dired_rename_file(file, newname, ok_if_already_exists, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file, newname
+            logical, intent(in) :: ok_if_already_exists
+            type(status_type), intent(out) :: status
+        end subroutine dired_rename_file
+
+        !> Give FILE the additional name NEWNAME and update its line.  Port
+        !> of dired-aux.el:dired-hardlink.  (In dired_aux_fm.)
+        recursive module subroutine dired_hardlink(file, newname, ok_if_already_exists, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file, newname
+            logical, intent(in) :: ok_if_already_exists
+            type(status_type), intent(out) :: status
+        end subroutine dired_hardlink
+
+        !> Make a symbolic link (pointing to FILE1) in FILE2.
+        !> The link is relative (if possible), for example
+        !>
+        !>     "/vol/tex/bin/foo" "/vol/local/bin/foo"
+        !>
+        !> results in
+        !>
+        !>     "../../tex/bin/foo" "/vol/local/bin/foo"
+        !>
+        !> Port of dired-aux.el:dired-make-relative-symlink.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_make_relative_symlink(file1, file2, status, ok_if_already_exists)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file1, file2
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: ok_if_already_exists
+        end subroutine dired_make_relative_symlink
+
+        !> Create one or more new files from a list of existing files FN_LIST.
+        !> This function also handles querying the user, updating Dired
+        !> buffers, and displaying a success or failure message.
+        !>
+        !> FILE_CREATOR is called once for each file in FN_LIST, and must
+        !> create a new file, querying the user and updating Dired buffers
+        !> as necessary.  It is given the old file name, the new name, and
+        !> an argument OK_FLAG with the same meaning as
+        !> OK_IF_ALREADY_EXISTS in `copy_file'.  CREATOR_KIND tells
+        !> whether it is `dired_copy_file' (DIRED_CREATOR_COPY).
+        !>
+        !> OPERATION should be a capitalized string describing the operation
+        !> performed (e.g. `Copy').  It is used for error logging.
+        !>
+        !> FN_LIST is the list of files to copy (full absolute file names).
+        !>
+        !> NAME_CONSTRUCTOR is given the name of an old file and returns
+        !> either the corresponding new file name or nil (SKIP) to skip.
+        !>
+        !> Mark each newly-created file's Dired entry with the character
+        !> MARKER_CHAR, or with the file's own mark if MARKER_CHAR is
+        !> DIRED_KEEP_MARKER (" " for none).  Port of
+        !> dired-aux.el:dired-create-files.  (In dired_aux_fm.)
+        recursive module subroutine dired_create_files(file_creator, creator_kind, operation, fn_list, &
+                                                       name_constructor, marker_char, status)
+            implicit none(type, external)
+            procedure(dired_file_creator_proc) :: file_creator
+            integer, intent(in) :: creator_kind
+            character(len=*), intent(in) :: operation
+            type(dired_string_type), intent(in) :: fn_list(:)
+            procedure(dired_name_constructor_proc) :: name_constructor
+            character, intent(in) :: marker_char
+            type(status_type), intent(out) :: status
+        end subroutine dired_create_files
+
+        !> Create a new file for each marked file.
+        !> Prompt user for a target directory in which to create the new
+        !>   files.  The target may also be a non-directory file, if only
+        !>   one file is marked.  The initial suggestion for target is the
+        !>   Dired buffer's current directory (or, if `dired_dwim_target' is
+        !>   set, the current directory of a neighboring Dired window).
+        !>
+        !> OP_SYMBOL is the symbol for the operation.  Function
+        !>   `dired_mark_pop_up' will determine whether pop-ups are
+        !>   appropriate for this OP_SYMBOL.
+        !>
+        !> FILE_CREATOR, CREATOR_KIND and OPERATION as in `dired_create_files'.
+        !>
+        !> ARG as in `dired_get_marked_files'.
+        !>
+        !> MARKER_CHAR as in `dired_create_files'.
+        !>
+        !> OP1 is an alternate form for OPERATION if there is only one file.
+        !>
+        !> HOW_TO_PLAIN true means the target is always treated as a plain
+        !> file (upstream's HOW-TO t); otherwise `file_directory_p' tells
+        !> whether the target is a directory.  Port of
+        !> dired-aux.el:dired-do-create-files (HOW-TO functions are
+        !> deferred).  (In dired_aux_fm.)
+        recursive module subroutine dired_do_create_files(op_symbol, file_creator, creator_kind, operation, arg_kind, &
+                                                          arg_n, marker_char, status, op1, how_to_plain)
+            implicit none(type, external)
+            character(len=*), intent(in) :: op_symbol, operation
+            procedure(dired_file_creator_proc) :: file_creator
+            integer, intent(in) :: creator_kind, arg_kind
+            integer(int64), intent(in) :: arg_n
+            character, intent(in) :: marker_char
+            type(status_type), intent(out) :: status
+            character(len=*), intent(in), optional :: op1
+            logical, intent(in), optional :: how_to_plain
+        end subroutine dired_do_create_files
+
+        !> Copy all marked (or next ARG) files, or copy the current file,
+        !> into the directory (or to the file) read in the minibuffer;
+        !> INVERT_DEREFERENCE inverts `dired_copy_dereference' (C-u).  Port
+        !> of dired-aux.el:dired-do-copy.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_copy(arg_kind, arg_n, status, invert_dereference)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: invert_dereference
+        end subroutine dired_do_copy
+
+        !> Make symbolic links to current file or all marked (or next ARG)
+        !> files.  Port of dired-aux.el:dired-do-symlink.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_symlink(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_symlink
+
+        !> Relative symlink all marked (or next ARG) files into a
+        !> directory.  Port of dired-aux.el:dired-do-relsymlink.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_do_relsymlink(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_relsymlink
+
+        !> Add names (hard links) current file or all marked (or next ARG)
+        !> files.  Port of dired-aux.el:dired-do-hardlink.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_hardlink(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_hardlink
+
+        !> Rename current file or all marked (or next ARG) files.  Port of
+        !> dired-aux.el:dired-do-rename.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_rename(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_rename
+
+        !> Rename selected files whose names match REGEXP to NEWNAME.
+        !> With WHOLE_NAME, renaming by regexp affects the absolute file
+        !> name.  Port of dired-aux.el:dired-do-rename-regexp.  (In
+        !> dired_aux_fm.)
+        recursive module subroutine dired_do_rename_regexp(regexp, newname, arg_kind, arg_n, whole_name, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: regexp, newname
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            logical, intent(in) :: whole_name
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_rename_regexp
+
+        !> Copy selected files whose names match REGEXP to NEWNAME.
+        !> See function `dired_do_rename_regexp' for more info.  Port of
+        !> dired-aux.el:dired-do-copy-regexp.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_copy_regexp(regexp, newname, arg_kind, arg_n, whole_name, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: regexp, newname
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            logical, intent(in) :: whole_name
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_copy_regexp
+
+        !> Hardlink selected files whose names match REGEXP to NEWNAME.
+        !> See function `dired_do_rename_regexp' for more info.  Port of
+        !> dired-aux.el:dired-do-hardlink-regexp.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_hardlink_regexp(regexp, newname, arg_kind, arg_n, whole_name, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: regexp, newname
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            logical, intent(in) :: whole_name
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_hardlink_regexp
+
+        !> Symlink selected files whose names match REGEXP to NEWNAME.
+        !> See function `dired_do_rename_regexp' for more info.  Port of
+        !> dired-aux.el:dired-do-symlink-regexp.  (In dired_aux_fm.)
+        recursive module subroutine dired_do_symlink_regexp(regexp, newname, arg_kind, arg_n, whole_name, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: regexp, newname
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            logical, intent(in) :: whole_name
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_symlink_regexp
+
+        !> RelSymlink all marked files containing REGEXP to NEWNAME.
+        !> See functions `dired_do_rename_regexp' and `dired_do_relsymlink'
+        !> for more info.  Port of dired-aux.el:dired-do-relsymlink-regexp.
+        !> (In dired_aux_fm.)
+        recursive module subroutine dired_do_relsymlink_regexp(regexp, newname, arg_kind, arg_n, whole_name, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: regexp, newname
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            logical, intent(in) :: whole_name
+            type(status_type), intent(out) :: status
+        end subroutine dired_do_relsymlink_regexp
+
+        !> Rename all marked (or next ARG) files to upper case.  Port of
+        !> dired-aux.el:dired-upcase.  (In dired_aux_fm.)
+        recursive module subroutine dired_upcase(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_upcase
+
+        !> Rename all marked (or next ARG) files to lower case.  Port of
+        !> dired-aux.el:dired-downcase.  (In dired_aux_fm.)
+        recursive module subroutine dired_downcase(arg_kind, arg_n, status)
+            implicit none(type, external)
+            integer, intent(in) :: arg_kind
+            integer(int64), intent(in) :: arg_n
+            type(status_type), intent(out) :: status
+        end subroutine dired_downcase
+
+        !> Create an empty file called FILE.
+        !> Parent directories of FILE are created as needed.
+        !> Add an entry in the Dired buffer for the topmost new parent
+        !> directory of FILE, if created, otherwise for the new file.
+        !> If FILE already exists, signal an error.  Port of
+        !> dired-aux.el:dired-create-empty-file.  (In dired_aux_fm.)
+        recursive module subroutine dired_create_empty_file(file, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+            type(status_type), intent(out) :: status
+        end subroutine dired_create_empty_file
+
+        !> In Dired, examine a file in view mode, returning to Dired when done.
+        !> When file is a directory, show it in this buffer if it is inserted.
+        !> Otherwise, display it in another buffer.  Port of
+        !> dired.el:dired-view-file.  (In dired_aux_fm.)
+        recursive module subroutine dired_view_file(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine dired_view_file
+
+        !> Print the type of FILE, according to the `file' command.
+        !> If DEREF_SYMLINKS is true and FILE is a symbolic link, then the
+        !> command will print the type of the target of the link instead.
+        !> Port of dired-aux.el:dired-show-file-type.  (In dired_aux_fm.)
+        recursive module subroutine dired_show_file_type(file, deref_symlinks, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+            logical, intent(in) :: deref_symlinks
+            type(status_type), intent(out) :: status
+        end subroutine dired_show_file_type
+
+        !> Bind the dired-aux.el commands in `dired_mode_map'.  (In
+        !> dired_aux_fm.)
+        module subroutine dired_aux_keys()
+            implicit none(type, external)
+        end subroutine dired_aux_keys
 
         !> Register the dired-aux.el commands.  (In dired_aux_fm.)
         module subroutine syms_of_dired_aux()
@@ -4604,11 +5283,15 @@ contains
     !> Remove a specific mark (or any mark) from every file.
     !> After this command, type the mark character to remove,
     !> or type RET to remove all marks.  Port of
-    !> dired.el:dired-unmark-all-files (ARG, querying each file, is
-    !> deferred).
-    recursive subroutine dired_unmark_all_files(mark, status)
+    !> With ARG true, query for each marked file.  Port of
+    !> dired.el:dired-unmark-all-files.
+    recursive subroutine dired_unmark_all_files(mark, status, arg)
         character, intent(in) :: mark
         type(status_type), intent(out) :: status
+        logical, intent(in), optional :: arg
+        character(len=:), allocatable :: file, help
+        integer :: query
+        logical :: ask, answer, file_found
         type(value_type) :: saved_ro
         type(status_type) :: st
         integer(int64) :: opoint, count, found_pos
@@ -4616,6 +5299,11 @@ contains
         status = status_type()
         opoint = point()
         count = 0
+        ask = .false.
+        if (present(arg)) ask = arg
+        query = 0
+        help = substitute_command_keys("Type \`SPC' or \`y' to unmark one file, \`DEL' or \`n' to skip to next,"//LF// &
+                                       "\`!' to unmark all remaining files with no more questions.")
         call inhibit_read_only_begin(saved_ro)
         saved_fold = case_fold_search%value
         case_fold_search%value = .false.
@@ -4628,6 +5316,17 @@ contains
                 found = found_pos > 0
             end if
             if (.not. found) exit
+            if (ask) then
+                found_pos = point()
+                call dired_get_filename(file, file_found, st, DIRED_LOCALP_T, .true.)
+                call goto_char(found_pos)
+                if (.not. (st%ok() .and. file_found)) cycle
+                call dired_query(query, format_message("Unmark file `")//file//format_message("'? "), answer, status, &
+                                 help_form=help)
+                call goto_char(found_pos)
+                if (.not. status%ok()) exit
+                if (.not. answer) cycle
+            end if
             call subst_char_in_region(point() - 1, point(), iachar(char_before_point()), iachar(" "), status)
             count = count + 1
         end do
@@ -4646,22 +5345,17 @@ contains
     !> or type RET to remove all marks.
     !> With prefix arg, query for each marked file.
     !> Type \[help_command] at that time for help.  Port of
-    !> dired.el:dired-unmark-all-files (interactive; the query is
-    !> deferred).
+    !> dired.el:dired-unmark-all-files (interactive).
     recursive subroutine cmd_dired_unmark_all_files(status)
         type(status_type), intent(out) :: status
         integer(int64) :: mark
         call read_char("Remove marks (RET means all): ", mark, status)
         if (.not. status%ok()) return
-        if (.not. nilp(current_prefix_arg)) then
-            call set_error(status, FM_GENERIC_ERROR, "Querying each marked file (dired_query) is not supported yet")
-            return
-        end if
         if (mark > 127) then
             call set_error(status, FM_GENERIC_ERROR, "Non-ASCII mark character")
             return
         end if
-        call dired_unmark_all_files(achar(mark), status)
+        call dired_unmark_all_files(achar(mark), status,.not. nilp(current_prefix_arg))
     end subroutine cmd_dired_unmark_all_files
 
     !> Remove all marks from all files in the Dired buffer.  Port of
@@ -5313,6 +6007,8 @@ contains
             call buffer_substring(point(), point_max(), text, st)
             call set_buffer(old, st)
             call message(text)
+        else if (size(failures) == 0) then
+            call message(string//"--type ? for details")
         else
             ! (format "%s" failures): a list of strings.
             list_text = "("
@@ -6132,6 +6828,7 @@ contains
         call bind("?", "dired_summary")
         call bind("DEL", "dired_unmark_backward")
         call bind_remap("undo", "dired_undo")
+        call dired_aux_keys()
         call register_keymap_name("dired_mode_map", dired_mode_map)
         ! (keymap-set ctl-x-map "d" #'dired)
         if (present(ctl_x_map)) call keymap_set(ctl_x_map, "d", "dired", st)

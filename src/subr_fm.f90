@@ -24,7 +24,7 @@
 !> `string_match_p', `looking_at_p', `looking_back').
 module subr_fm
     use error_fm, only: status_type, set_error, FM_QUIT
-    use, intrinsic :: iso_fortran_env, only: int64, real64
+    use, intrinsic :: iso_fortran_env, only: int32, int64, real64
     use lisp_fm, only: value_type, fixnump, xfixnum, nil, nilp, listp, make_string, cons, list_length, list_elt, &
                        make_keymap_ref, symbolp, xsymbol, symbols, &
                        list_elements, make_list, stringp, xstring, t_value
@@ -55,6 +55,7 @@ module subr_fm
     public :: global_set_key, read_number, undefined, syms_of_subr, defvar_nil, forward_symbol, find_tag_default, &
               find_tag_default_as_regexp, find_tag_default_as_symbol_regexp
     public :: make_progress_reporter, progress_reporter_update, progress_reporter_done
+    public :: read_char_from_minibuffer, read_char_choice, shell_quote_argument
 
     !> A numerical progress reporter (`make_progress_reporter' with
     !> MIN_VALUE and MAX_VALUE): the value at which to report next (the
@@ -67,6 +68,9 @@ module subr_fm
         character(len=:), allocatable :: text
         integer :: min_change = 1
         real(real64) :: min_time = 0.2_real64
+        !> A pulsing reporter (no MIN-VALUE and MAX-VALUE) and its indicator.
+        logical :: pulsing = .false.
+        integer :: pulse_index = 0
     end type progress_reporter_type
     public :: after_hook_proc, add_delayed_after_hook, silent_modifications_type, silent_modifications_begin, &
               silent_modifications_end
@@ -215,6 +219,53 @@ module subr_fm
 
         !> Register subr.el's commands (and keyboard.c's
         !> abort-recursive-edit).  (In subr_read_fm.)
+        !> Read a character from the minibuffer, prompting for it with PROMPT.
+        !> Like `read_char', but uses the minibuffer to read and return a character.
+        !> CHARS, if present, are the characters accepted; the function will
+        !> ignore any input that is not one of CHARS.
+        !> HISTORY, if present, names the history list variable to use for
+        !> navigating in input history using \`M-p' and \`M-n', with \`RET' to
+        !> select a character from history.
+        !> If HELP_FORM is present (upstream's `help_form' bound around the
+        !> call), then pressing `help_char' displays it.  There is no need to
+        !> explicitly add `help_char' to CHARS; `help_char' is bound
+        !> automatically to `help_form_show'.  Port of
+        !> subr.el:read-char-from-minibuffer (exiting after other
+        !> insertions, its `post_command_hook', is deferred).  (In
+        !> subr_read_fm.)
+        recursive module subroutine read_char_from_minibuffer(prompt, c, status, chars, history, help_form)
+            implicit none(type, external)
+            character(len=*), intent(in) :: prompt
+            integer, intent(out) :: c
+            type(status_type), intent(out) :: status
+            integer, intent(in), optional :: chars(:)
+            character(len=*), intent(in), optional :: history, help_form
+        end subroutine read_char_from_minibuffer
+
+        !> Read and return one of the characters in CHARS, prompting with PROMPT.
+        !> CHARS should be a list of single characters.
+        !> The function discards any input character that is not one of CHARS,
+        !> and by default shows a message to the effect that it is not one of
+        !> the expected characters.
+        !>
+        !> By default, this function uses the minibuffer to read the key
+        !> non-modally (see `read_char_from_minibuffer'), and the optional
+        !> argument INHIBIT_KEYBOARD_QUIT is ignored.  However, if
+        !> `read_char_choice_use_read_key' is true, the modal `read_key'
+        !> function is used instead (see read_char_choice_with_read_key),
+        !> and INHIBIT_KEYBOARD_QUIT is passed to it.  HELP_FORM is the text
+        !> `help_char' shows (upstream's `help_form').  Port of
+        !> subr.el:read-char-choice.  (In subr_read_fm.)
+        recursive module subroutine read_char_choice(prompt, chars, c, status, inhibit_keyboard_quit, help_form)
+            implicit none(type, external)
+            character(len=*), intent(in) :: prompt
+            integer, intent(in) :: chars(:)
+            integer, intent(out) :: c
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: inhibit_keyboard_quit
+            character(len=*), intent(in), optional :: help_form
+        end subroutine read_char_choice
+
         module subroutine syms_of_subr()
             implicit none(type, external)
         end subroutine syms_of_subr
@@ -298,6 +349,41 @@ module subr_fm
     end interface
 
 contains
+
+    !> Quote ARGUMENT for passing as argument to an inferior shell.
+    !>
+    !> This function is designed to work with the syntax of your system's
+    !> standard shell, and might produce incorrect results with unusual shells.
+    !> See Info node `(elisp)Security Considerations'.  Port of
+    !> subr.el:shell-quote-argument (POSIX shells: the systems are Linux).
+    pure function shell_quote_argument(argument) result(quoted)
+        character(len=*), intent(in) :: argument
+        character(len=:), allocatable :: quoted
+        integer :: i, b
+        if (len(argument) == 0) then
+            quoted = "''"
+            return
+        end if
+        ! Quote everything except POSIX filename characters.
+        ! This should be safe enough even for really weird shells.
+        quoted = ""
+        do i = 1, len(argument)
+            b = ichar(argument(i:i), kind=int32)
+            if (index("-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_./", argument(i:i)) > 0 .or. &
+                b == 10) then
+                if (b == 10) then
+                    quoted = quoted//"'"//achar(10)//"'"
+                else
+                    quoted = quoted//argument(i:i)
+                end if
+            else if (b >= 128 .and. b < 192) then
+                ! A continuation byte of the character quoted before.
+                quoted = quoted//argument(i:i)
+            else
+                quoted = quoted//"\"//argument(i:i)
+            end if
+        end do
+    end function shell_quote_argument
 
     !> Start modifying the current buffer without marking it modified,
     !> recording undo, running the change hooks or asking about read-only
@@ -706,15 +792,24 @@ contains
     !> complete) states of operation; the latter should be larger.  The
     !> status message shows the percentage progress.  The minimal change
     !> to report is 1%, the minimum interval between echo area updates
-    !> 0.2 seconds.  Port of subr.el:make-progress-reporter (numerical
-    !> reporters, default CURRENT-VALUE, MIN-CHANGE and MIN-TIME).
+    !> 0.2 seconds.  Without MIN_VALUE and MAX_VALUE, the reporter is a
+    !> pulsing one (its indicator turns).  Port of
+    !> subr.el:make-progress-reporter (default CURRENT-VALUE, MIN-CHANGE
+    !> and MIN-TIME).
     subroutine make_progress_reporter(reporter, message_text, min_value, max_value)
         type(progress_reporter_type), intent(out) :: reporter
         character(len=*), intent(in) :: message_text
-        integer(int64), intent(in) :: min_value, max_value
+        integer(int64), intent(in), optional :: min_value, max_value
         type(status_type) :: st
         reporter%text = message_text
         if (string_match("[[:alnum:]]\'", message_text, st) > 0) reporter%text = message_text//"..."
+        reporter%update_time = float_time()
+        if (.not. (present(min_value) .and. present(max_value))) then
+            ! A pulsing indicator.
+            reporter%pulsing = .true.
+            call progress_reporter_pulse(reporter)
+            return
+        end if
         reporter%next_value = real(min_value, real64)
         reporter%update_time = float_time()
         reporter%min_value = min_value
@@ -774,6 +869,21 @@ contains
         type(progress_reporter_type), intent(in) :: reporter
         call message(reporter%text//"done")
     end subroutine progress_reporter_done
+
+    !> The update of a pulsing reporter: turn its indicator when enough
+    !> time has passed.  Port of the pulsing branch of
+    !> subr.el:progress-reporter-do-update (with
+    !> progress-reporter-echo-area).
+    subroutine progress_reporter_pulse(reporter)
+        type(progress_reporter_type), intent(inout) :: reporter
+        character(len=4), parameter :: pulse_characters = "-\|/"
+        integer :: k
+        if (.not. (reporter%update_time < float_time())) return
+        reporter%update_time = reporter%update_time + reporter%min_time
+        reporter%pulse_index = reporter%pulse_index + 1
+        k = mod(reporter%pulse_index, 4) + 1
+        call message(reporter%text//" "//pulse_characters(k:k))
+    end subroutine progress_reporter_pulse
 
     !> Move point to the next position that is the end of a symbol.
     !> A symbol is any sequence of characters that are in either the

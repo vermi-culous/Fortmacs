@@ -35,7 +35,7 @@
 module fileio_fm
     use, intrinsic :: iso_fortran_env, only: int32, int64
     use error_fm, only: status_type, set_error, FM_FILE_ERROR, FM_FILE_MISSING, FM_FILE_ALREADY_EXISTS, &
-                        FM_GENERIC_ERROR, FM_WRONG_TYPE_ARGUMENT, FM_PERMISSION_DENIED
+                        FM_GENERIC_ERROR, FM_WRONG_TYPE_ARGUMENT, FM_PERMISSION_DENIED, FM_FILE_DATE_ERROR
     use buffer_fm, only: buffers, cur, BEG, BEG_BYTE, buf_bytes, barf_if_buffer_read_only, vdeactivate_mark
     use character_fm, only: str_as_multibyte, str_as_unibyte
     use marker_fm, only: char_to_byte
@@ -47,9 +47,44 @@ module fileio_fm
                          passwd_home_of_user, emacs_strerror, emacs_read, emacs_full_write, &
                          close_fd, emacs_geteuid, emacs_getegid, ENOENT, EISDIR, EEXIST, EACCES, F_OK, R_OK, &
                          W_OK, X_OK, S_IFMT, S_IFDIR, S_IFREG, S_IFLNK, sys_symlink, EEXIST, emacs_statvfs, &
-                         ENOTDIR
+                         ENOTDIR, emacs_open_mode, sys_link, sys_rename_noreplace, sys_set_file_times, sys_futimens, &
+                         emacs_umask, sys_fchmod, sys_chmod_at, sys_fchown, emacs_readlink, O_WRONLY, O_CREAT, O_EXCL, &
+                         O_TRUNC, UTIME_NOW, EXDEV, EINVAL, ENOSYS, ENOTSUP
     implicit none(type, external)
     private
+
+    public :: add_name_to_file, set_file_times, default_file_modes, file_symlink_target
+    public :: copy_directory_hook, delete_directory_hook, delete_file_hook, file_operation_proc, &
+              copy_directory_proc
+
+    abstract interface
+        !> files.el's `delete_file' (no trash) or `delete_directory' with
+        !> RECURSIVE true, on FILE.
+        recursive subroutine file_operation_proc(file, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: file
+            type(status_type), intent(out) :: status
+        end subroutine file_operation_proc
+
+        !> files.el's `copy_directory' with KEEP_TIME true and PARENTS false.
+        recursive subroutine copy_directory_proc(directory, newname, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: directory, newname
+            type(status_type), intent(out) :: status
+        end subroutine copy_directory_proc
+    end interface
+
+    !> What `rename_file' calls (through Lisp upstream) to move a
+    !> directory, or delete a file or a directory, across file systems;
+    !> set by files_fm.
+    procedure(copy_directory_proc), pointer :: copy_directory_hook => null()
+    procedure(file_operation_proc), pointer :: delete_directory_hook => null()
+    procedure(file_operation_proc), pointer :: delete_file_hook => null()
+
+    !> fileio.c's realmask: the file mode creation mask (-1 until read).
+    integer(int32) :: realmask = -1
 
     public :: file_stat_type
     public :: file_name_directory, file_name_nondirectory, file_name_as_directory, &
@@ -83,6 +118,7 @@ contains
     !> Record the starting directory (emacs.c:main sets emacs_wd).
     subroutine init_fileio()
         emacs_wd = emacs_get_current_dir_name()
+        realmask = emacs_umask()
     end subroutine init_fileio
 
     !> The directory part of `filename', ending in a slash, or "" if it has
@@ -586,79 +622,438 @@ contains
         group_gid = emacs_getegid()
     end function group_gid
 
-    !> Permission bits of `filename', or -1 if it doesn't exist.
-    !> Port of fileio.c:Ffile_modes.
-    integer(int32) function file_modes(filename)
+    !> Return mode bits of file named FILENAME, as an integer.
+    !> Return -1 if FILENAME does not exist.  If optional NOFOLLOW is
+    !> true, do not follow FILENAME if it is a symbolic link.  Port of
+    !> fileio.c:Ffile_modes.
+    integer(int32) function file_modes(filename, nofollow)
         character(len=*), intent(in) :: filename
+        logical, intent(in), optional :: nofollow
+        character(len=:), allocatable :: absname
         type(file_stat_type) :: st
-        logical :: found
-        call file_attributes(filename, st, found)
         file_modes = -1
-        if (found) file_modes = iand(st%mode, int(o'7777', int32))
+        ! expand_and_dir_to_file
+        absname = expand_quietly(filename)
+        if (len(absname) == 0) return
+        absname = directory_file_name(absname)
+        if (sys_stat(absname, st, nofollow=nofollow) /= 0) return
+        file_modes = iand(st%mode, int(o'7777', int32))
     end function file_modes
 
-    !> Set the permission bits of `filename'.
-    !> Port of fileio.c:Fset_file_modes.
-    subroutine set_file_modes(filename, mode, status)
+    !> Set mode bits of file named FILENAME to MODE (an integer).
+    !> Only the 12 low bits of MODE are used.  If optional NOFOLLOW is
+    !> true, do not follow FILENAME if it is a symbolic link.  Port of
+    !> fileio.c:Fset_file_modes (not interactive).
+    subroutine set_file_modes(filename, mode, status, nofollow)
         character(len=*), intent(in) :: filename
         integer(int32), intent(in) :: mode
         type(status_type), intent(out) :: status
+        logical, intent(in), optional :: nofollow
         character(len=:), allocatable :: absname
         integer(int32) :: err
+        logical :: nofollow_flag
+        nofollow_flag = .false.
+        if (present(nofollow)) nofollow_flag = nofollow
         call expand_file_name(filename, absname, status)
         if (.not. status%ok()) return
-        err = sys_chmod(absname, mode)
+        err = sys_chmod_at(absname, iand(mode, int(o'7777', int32)), nofollow_flag)
         if (err /= 0) call report_file_errno("Doing chmod", absname, err, status)
     end subroutine set_file_modes
 
-    !> Rename `file' to `newname', replacing it if it exists.  Port of
-    !> fileio.c:Frename_file with OK-IF-ALREADY-EXISTS non-nil, for files
-    !> on one file system.
-    subroutine rename_file(file, newname, status)
+    !> The file mode creation mask (fileio.c's realmask), read from the
+    !> process the first time it is needed.
+    integer(int32) function current_realmask()
+        if (realmask < 0) realmask = emacs_umask()
+        current_realmask = realmask
+    end function current_realmask
+
+    !> Return the default file protection for created files.
+    !> The value is an integer.  Port of fileio.c:Fdefault_file_modes.
+    integer(int32) function default_file_modes()
+        default_file_modes = iand(not(current_realmask()), int(o'777', int32))
+    end function default_file_modes
+
+    !> Set times of file FILENAME to MTIME_SEC and MTIME_NSEC (seconds
+    !> and nanoseconds since the epoch).  If optional NOFOLLOW is true,
+    !> do not follow FILENAME if it is a symbolic link.  Set both access
+    !> and modification times.  Use the current time if MTIME_SEC is
+    !> absent.  Port of fileio.c:Fset_file_times.
+    subroutine set_file_times(filename, status, mtime_sec, mtime_nsec, nofollow)
+        character(len=*), intent(in) :: filename
+        type(status_type), intent(out) :: status
+        integer(int64), intent(in), optional :: mtime_sec
+        integer(int32), intent(in), optional :: mtime_nsec
+        logical, intent(in), optional :: nofollow
+        character(len=:), allocatable :: absname
+        integer(int64) :: sec
+        integer(int32) :: nsec, err
+        logical :: nofollow_flag
+        nofollow_flag = .false.
+        if (present(nofollow)) nofollow_flag = nofollow
+        if (present(mtime_sec)) then
+            sec = mtime_sec
+            nsec = 0
+            if (present(mtime_nsec)) nsec = mtime_nsec
+        else
+            sec = 0
+            nsec = int(UTIME_NOW, int32)
+        end if
+        call expand_file_name(filename, absname, status)
+        if (.not. status%ok()) return
+        err = sys_set_file_times(absname, sec, nsec, sec, nsec, nofollow_flag)
+        if (err /= 0) call report_file_errno("Setting file times", absname, err, status)
+    end subroutine set_file_times
+
+    !> Return FILE as `cp FILE NEWNAME' would name the target: a file
+    !> under NEWNAME with FILE's own name if NEWNAME is a directory name,
+    !> else NEWNAME (expanded).  Port of fileio.c:expand_cp_target.
+    subroutine expand_cp_target(file, newname, target, status)
+        character(len=*), intent(in) :: file, newname
+        character(len=:), allocatable, intent(out) :: target
+        type(status_type), intent(out) :: status
+        if (directory_name_p(newname)) then
+            call expand_file_name(file_name_nondirectory(file), target, status, newname)
+        else
+            call expand_file_name(newname, target, status)
+        end if
+    end subroutine expand_cp_target
+
+    !> Signal an error if file ABSNAME exists: `file_already_exists',
+    !> or `file_error' if it is a directory.  KNOWN_TO_EXIST says it is
+    !> known to exist.  Port of fileio.c:barf_or_query_if_file_exists
+    !> (the query is not ported: INTERACTIVE false).
+    subroutine barf_if_file_exists(absname, known_to_exist, status)
+        character(len=*), intent(in) :: absname
+        logical, intent(in) :: known_to_exist
+        type(status_type), intent(inout) :: status
+        type(file_stat_type) :: st
+        logical :: known
+        known = known_to_exist
+        if (.not. known) then
+            if (sys_stat(absname, st, nofollow=.true.) == 0) then
+                if (iand(st%mode, S_IFMT) == S_IFDIR) then
+                    call set_error(status, FM_FILE_ERROR, "File is a directory: "//absname)
+                    return
+                end if
+                known = .true.
+            end if
+        end if
+        if (known) call set_error(status, FM_FILE_ALREADY_EXISTS, "File already exists: "//absname)
+    end subroutine barf_if_file_exists
+
+    !> Rename FILE as NEWNAME.  Both args must be strings.
+    !> If file has names other than FILE, it continues to have those names.
+    !> If NEWNAME is a directory name, rename FILE to a like-named file under
+    !> NEWNAME.  For NEWNAME to be recognized as a directory name, it should
+    !> end in a slash.
+    !>
+    !> Signal a `file_already_exists' error if a file NEWNAME already exists
+    !> unless optional third argument OK_IF_ALREADY_EXISTS is true.  Port
+    !> of fileio.c:Frename_file (not interactive: no confirmation).
+    recursive subroutine rename_file(file, newname, status, ok_if_already_exists)
         character(len=*), intent(in) :: file, newname
         type(status_type), intent(out) :: status
-        character(len=:), allocatable :: from, to
-        integer(int32) :: err
+        logical, intent(in), optional :: ok_if_already_exists
+        character(len=:), allocatable :: from, to, target
+        type(file_stat_type) :: file_st
+        integer(int32) :: err, lerr
+        logical :: ok, plain_rename, dirp
+        ok = .false.
+        if (present(ok_if_already_exists)) ok = ok_if_already_exists
         call expand_file_name(file, from, status)
         if (.not. status%ok()) return
-        call expand_file_name(newname, to, status)
+        call expand_cp_target(directory_file_name(from), newname, to, status)
         if (.not. status%ok()) return
-        err = sys_rename(from, to)
-        if (err /= 0) call report_file_errno("Renaming", from//", "//to, err, status)
+        plain_rename = ok
+        err = 0
+        if (.not. plain_rename) then
+            err = sys_rename_noreplace(from, to)
+            if (err == 0) return
+            select case (err)
+            case (EEXIST, EINVAL, ENOSYS, ENOTSUP)
+                call barf_if_file_exists(to, err == EEXIST, status)
+                if (.not. status%ok()) return
+                plain_rename = .true.
+            case default
+                continue
+            end select
+        end if
+        if (plain_rename) then
+            err = sys_rename(from, to)
+            if (err == 0) return
+            ! Don't prompt again.
+            ok = .true.
+        end if
+        if (err /= EXDEV) then
+            call report_file_errno("Renaming", from//", "//to, err, status)
+            return
+        end if
+        ! Across file systems: copy, then delete the original.
+        dirp = directory_name_p(from)
+        if (.not. dirp) then
+            lerr = sys_stat(from, file_st, nofollow=.true.)
+            if (lerr /= 0) then
+                call report_file_errno("Renaming", from//", "//to, lerr, status)
+                return
+            end if
+            dirp = iand(file_st%mode, S_IFMT) == S_IFDIR
+        end if
+        if (dirp) then
+            if (.not. associated(copy_directory_hook)) then
+                call report_file_errno("Renaming", from//", "//to, err, status)
+                return
+            end if
+            call copy_directory_hook(from, to, status)
+        else if (iand(file_st%mode, S_IFMT) == S_IFREG) then
+            call copy_file(from, to, status, ok_if_already_exists=ok, keep_time=.true., preserve_uid_gid=.true., &
+                           preserve_permissions=.true.)
+        else if (iand(file_st%mode, S_IFMT) == S_IFLNK) then
+            lerr = emacs_readlink(from, target)
+            if (lerr /= 0) then
+                call report_file_errno("Renaming", from//", "//to, lerr, status)
+                return
+            end if
+            call make_symbolic_link(target, to, status, ok)
+        else
+            call report_file_errno("Renaming", from//", "//to, err, status)
+        end if
+        if (.not. status%ok()) return
+        ! (delete-by-moving-to-trash nil)
+        if (dirp) then
+            if (associated(delete_directory_hook)) call delete_directory_hook(from, status)
+        else
+            if (associated(delete_file_hook)) then
+                call delete_file_hook(from, status)
+            else
+                call delete_file_internal(from, status)
+            end if
+        end if
     end subroutine rename_file
 
-    !> Copy `file' to `newname', replacing it, with the same permission
-    !> bits.  Port of fileio.c:Fcopy_file with OK-IF-ALREADY-EXISTS
-    !> non-nil (times, owner and ACLs are not copied yet).
-    subroutine copy_file(file, newname, status)
+    !> Copy FILE to NEWNAME.  Both args must be strings.
+    !> If NEWNAME is a directory name, copy FILE to a like-named file under
+    !> NEWNAME.  For NEWNAME to be recognized as a directory name, it should
+    !> end in a slash.
+    !>
+    !> This function always sets the file modes of the output file to match
+    !> the input file.
+    !>
+    !> The optional argument OK_IF_ALREADY_EXISTS specifies what to do
+    !> if file NEWNAME already exists.  If OK_IF_ALREADY_EXISTS is false,
+    !> signal a `file_already_exists' error without overwriting.
+    !> Otherwise overwrite the existing file.
+    !>
+    !> KEEP_TIME true means give the output file the same
+    !> last-modified time as the old one.  (This works on only some systems.)
+    !>
+    !> If PRESERVE_UID_GID is true, try to transfer the uid and gid of
+    !> FILE to NEWNAME.
+    !>
+    !> If PRESERVE_PERMISSIONS is true, copy permissions of FILE to NEWNAME;
+    !> this includes the file modes, along with ACL entries and SELinux
+    !> context if present.  Otherwise, if NEWNAME is created its file
+    !> permission bits are those of FILE, masked by the default file
+    !> permissions.  Port of fileio.c:Fcopy_file (not interactive: no
+    !> confirmation; ACL entries and SELinux contexts are not copied, and
+    !> FICLONE and copy_file_range are not used: the data are read and
+    !> written).
+    subroutine copy_file(file, newname, status, ok_if_already_exists, keep_time, preserve_uid_gid, &
+                         preserve_permissions)
         character(len=*), intent(in) :: file, newname
         type(status_type), intent(out) :: status
-        character(len=:), allocatable :: from, to, data
-        integer(int32) :: err, fd, mode
-        integer(int64) :: written
-        type(status_type) :: st
+        logical, intent(in), optional :: ok_if_already_exists, keep_time, preserve_uid_gid, preserve_permissions
+        character(len=:), allocatable :: from, to
+        character(len=READ_BUF_SIZE) :: chunk
+        type(file_stat_type) :: st, out_st
+        type(status_type) :: st_io
+        integer(int32) :: err, ifd, ofd, new_mask, preserved, default_permissions, mask
+        integer(int64) :: nread, written
+        logical :: ok, keep, preserve_ids, preserve_perms, already_exists
+        ok = .false.
+        if (present(ok_if_already_exists)) ok = ok_if_already_exists
+        keep = .false.
+        if (present(keep_time)) keep = keep_time
+        preserve_ids = .false.
+        if (present(preserve_uid_gid)) preserve_ids = preserve_uid_gid
+        preserve_perms = .false.
+        if (present(preserve_permissions)) preserve_perms = preserve_permissions
         call expand_file_name(file, from, status)
         if (.not. status%ok()) return
-        call expand_file_name(newname, to, status)
+        call expand_cp_target(from, newname, to, status)
         if (.not. status%ok()) return
-        call read_file(from, "Opening input file", data, status)
-        if (.not. status%ok()) return
-        mode = file_modes(from)
-        if (mode < 0) mode = int(o'666', int32)
-        err = emacs_creat(to, mode, fd)
+        err = emacs_open_read(from, ifd)
         if (err /= 0) then
+            call report_file_errno("Opening input file", from, err, status)
+            return
+        end if
+        err = sys_stat(from, st)
+        if (err /= 0) then
+            call close_fd(ifd)
+            call report_file_errno("Input file status", from, err, status)
+            return
+        end if
+        ! We can copy only regular files.
+        if (iand(st%mode, S_IFMT) /= S_IFREG) then
+            call close_fd(ifd)
+            if (iand(st%mode, S_IFMT) == S_IFDIR) then
+                call report_file_errno("Non-regular file", from, EISDIR, status)
+            else
+                call report_file_errno("Non-regular file", from, EINVAL, status)
+            end if
+            return
+        end if
+        if (preserve_ids) then
+            new_mask = iand(st%mode, int(o'700', int32))
+        else
+            new_mask = iand(st%mode, int(o'777', int32))
+        end if
+        already_exists = .false.
+        err = emacs_open_mode(to, ior(O_WRONLY, ior(O_CREAT, O_EXCL)), new_mask, ofd)
+        if (err == EEXIST) then
+            if (.not. ok) then
+                call close_fd(ifd)
+                call barf_if_file_exists(to, .true., status)
+                return
+            end if
+            already_exists = .true.
+            err = emacs_open_mode(to, ior(O_WRONLY, O_TRUNC), 0, ofd)
+        end if
+        if (err /= 0) then
+            call close_fd(ifd)
             call report_file_errno("Opening output file", to, err, status)
             return
         end if
-        call emacs_full_write(fd, data, written, st, err)
-        call close_fd(fd)
-        if (.not. st%ok()) then
-            call report_file_errno("Write error", to, err, status)
+        if (already_exists) then
+            err = sys_stat(to, out_st)
+            if (err /= 0) then
+                call close_fd(ifd)
+                call close_fd(ofd)
+                call report_file_errno("Output file status", to, err, status)
+                return
+            end if
+            if (st%dev == out_st%dev .and. st%ino == out_st%ino) then
+                call close_fd(ifd)
+                call close_fd(ofd)
+                call report_file_errno("Input and output files are the same", from//", "//to, 0, status)
+                return
+            end if
+        end if
+        do
+            call emacs_read(ifd, chunk, nread, st_io, err)
+            if (.not. st_io%ok()) then
+                call close_fd(ifd)
+                call close_fd(ofd)
+                call report_file_errno("Read error", from, err, status)
+                return
+            end if
+            if (nread == 0) exit
+            call emacs_full_write(ofd, chunk(1:nread), written, st_io, err)
+            if (.not. st_io%ok() .or. written /= nread) then
+                call close_fd(ifd)
+                call close_fd(ofd)
+                call report_file_errno("Write error", to, err, status)
+                return
+            end if
+        end do
+        ! Preserve the original file permissions, and if requested, also
+        ! its owner and group.
+        mask = current_realmask()
+        preserved = iand(st%mode, int(o'7777', int32))
+        default_permissions = iand(iand(st%mode, int(o'777', int32)), not(mask))
+        if (preserve_ids) then
+            ! Attempt to change owner and group.  If that doesn't work
+            ! attempt to change just the group, as that is sometimes
+            ! allowed.  Adjust the mode mask to eliminate setuid or setgid
+            ! bits or group permissions bits that are inappropriate if the
+            ! owner or group are wrong.
+            if (sys_fchown(ofd, st%uid, st%gid) /= 0) then
+                if (sys_fchown(ofd, -1, st%gid) == 0) then
+                    preserved = iand(preserved, not(int(o'4000', int32)))
+                else
+                    preserved = iand(preserved, not(int(o'6000', int32)))
+                    ! Copy the other bits to the group bits, since the
+                    ! group is wrong.
+                    preserved = iand(preserved, not(int(o'70', int32)))
+                    preserved = ior(preserved, shiftl(iand(preserved, 7_int32), 3))
+                    default_permissions = iand(default_permissions, not(int(o'70', int32)))
+                    default_permissions = ior(default_permissions, shiftl(iand(default_permissions, 7_int32), 3))
+                end if
+            end if
+        end if
+        err = 0
+        if (preserve_perms) then
+            ! qcopy_acl without ACLs: the permission bits.
+            err = sys_fchmod(ofd, preserved)
+        else if (.not. (already_exists .or. iand(new_mask, not(mask)) == default_permissions)) then
+            err = sys_fchmod(ofd, default_permissions)
+        end if
+        if (err /= 0) then
+            call close_fd(ifd)
+            call close_fd(ofd)
+            call report_file_errno("Copying permissions to", to, err, status)
             return
         end if
-        ! creat applied the umask; give the copy the original's bits.
-        err = sys_chmod(to, mode)
+        if (keep) then
+            if (sys_futimens(ofd, st%atime_sec, st%atime_nsec, st%mtime_sec, st%mtime_nsec) /= 0) then
+                call close_fd(ifd)
+                call close_fd(ofd)
+                call set_error(status, FM_FILE_DATE_ERROR, "Cannot set file date: "//to)
+                return
+            end if
+        end if
+        call close_fd(ofd)
+        call close_fd(ifd)
     end subroutine copy_file
+
+    !> Give FILE additional name NEWNAME.  Both args must be strings.
+    !> If NEWNAME is a directory name, give FILE a like-named new name under
+    !> NEWNAME.
+    !>
+    !> Signal a `file_already_exists' error if a file NEWNAME already exists
+    !> unless optional third argument OK_IF_ALREADY_EXISTS is true.
+    !> Port of fileio.c:Fadd_name_to_file (not interactive).
+    subroutine add_name_to_file(file, newname, status, ok_if_already_exists)
+        character(len=*), intent(in) :: file, newname
+        type(status_type), intent(out) :: status
+        logical, intent(in), optional :: ok_if_already_exists
+        character(len=:), allocatable :: from, to
+        integer(int32) :: err
+        logical :: ok
+        ok = .false.
+        if (present(ok_if_already_exists)) ok = ok_if_already_exists
+        call expand_file_name(file, from, status)
+        if (.not. status%ok()) return
+        call expand_cp_target(from, newname, to, status)
+        if (.not. status%ok()) return
+        err = sys_link(from, to)
+        if (err == 0) return
+        if (err == EEXIST) then
+            if (.not. ok) then
+                call barf_if_file_exists(to, .true., status)
+                return
+            end if
+            err = sys_unlink(to)
+            err = sys_link(from, to)
+            if (err == 0) return
+        end if
+        call report_file_errno("Adding new name", from//", "//to, err, status)
+    end subroutine add_name_to_file
+
+    !> The target of symbolic link FILENAME, or "" if it is not a
+    !> symbolic link (the string `file_symlink_p' returns upstream).
+    !> Port of fileio.c:Ffile_symlink_p.
+    function file_symlink_target(filename) result(target)
+        character(len=*), intent(in) :: filename
+        character(len=:), allocatable :: target
+        character(len=:), allocatable :: absname
+        integer(int32) :: err
+        target = ""
+        absname = expand_quietly(filename)
+        if (len(absname) == 0) return
+        if (.not. file_symlink_p(absname)) return
+        err = emacs_readlink(absname, target)
+        if (err /= 0) target = ""
+    end function file_symlink_target
 
     !> Create directory `directory' (its parent must exist).
     !> Port of fileio.c:Fmake_directory_internal.

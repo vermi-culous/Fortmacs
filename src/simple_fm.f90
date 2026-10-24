@@ -105,6 +105,7 @@ module simple_fm
 
     public :: execute_extended_command, read_extended_command
     public :: fundamental_mode, special_mode, syms_of_simple_modes
+    public :: read_only_mode, what_line
     public :: read_shell_command, shell_command, shell_command_on_region, display_message_or_buffer, &
               syms_of_simple_shell
 
@@ -253,6 +254,9 @@ module simple_fm
 
     !> Hook run after entering or leaving `indent_tabs_mode'.
     type(hook_type), target, public :: indent_tabs_mode_hook = hook_type(name="indent_tabs_mode_hook")
+
+    !> Hook run after entering or leaving `read_only_mode'.
+    type(hook_type), target, public :: read_only_mode_hook = hook_type(name="read_only_mode_hook")
 
     !> Hook run after entering or leaving `auto_fill_mode'.
     type(hook_type), target, public :: auto_fill_mode_hook = hook_type(name="auto_fill_mode_hook")
@@ -407,6 +411,39 @@ module simple_fm
             implicit none(type, external)
         end subroutine syms_of_simple_modes
 
+        !> Change whether the current buffer is read-only.
+        !>
+        !> If buffer is read-only and `view_read_only' is true, enter
+        !> view mode.
+        !>
+        !> Do not call this from a program unless you really intend to
+        !> do the same thing as the \[read_only_mode] command, including
+        !> possibly enabling or disabling View mode.  Also, note that this
+        !> command works by setting the variable `buffer_read_only', which
+        !> does not affect read-only regions caused by text properties.  To
+        !> ignore read-only status in a program (whether due to text
+        !> properties or buffer state), bind `inhibit_read_only' temporarily
+        !> to a true value.
+        !>
+        !> Reverting a buffer will keep the read-only status set by using
+        !> this command.  Port of simple.el:read-only-mode.  (In
+        !> simple_view_fm.)
+        recursive module subroutine read_only_mode(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine read_only_mode
+
+        !> Print the current buffer line number and narrowed line number of point.
+        !> Port of simple.el:what-line.  (In simple_view_fm.)
+        module subroutine what_line(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine what_line
+
+        !> Define `read_only_mode' and `what_line'.  (In simple_view_fm.)
+        module subroutine syms_of_simple_view()
+            implicit none(type, external)
+        end subroutine syms_of_simple_view
         !> Read a shell command from the minibuffer, and return it as a
         !> string.  The arguments are the same as the ones of
         !> `read_from_minibuffer', except READ and KEYMAP are missing and
@@ -1858,6 +1895,7 @@ contains
         kill_forward_chars_hook => kill_forward_chars
         call syms_of_simple_fill()
         call syms_of_simple_modes()
+        call syms_of_simple_view()
         call syms_of_simple_shell()
         cycle_spacing_actions = [cycle_spacing_action_type(CYCLE_JUST_ONE_SPACE), &
                                  cycle_spacing_action_type(CYCLE_DELETE_ALL_SPACE), &

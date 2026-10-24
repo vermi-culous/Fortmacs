@@ -70,6 +70,7 @@ module bindings_fm
     use font_lock_fm, only: syms_of_font_lock
     use jit_lock_fm, only: syms_of_jit_lock
     use dired_mode_fm, only: syms_of_dired_mode, dired_mode_map
+    use view_fm, only: syms_of_view
     use process_fm, only: syms_of_process
     use compile_fm, only: syms_of_compile, compilation_mode_map
     use rect_fm, only: syms_of_rect
@@ -452,6 +453,7 @@ contains
         key(1) = make_fixnum(int(iachar("4"), int64))
         call define_key(ctl_x_map, key, make_keymap_ref(ctl_x_4_map), status)
         call syms_of_files(ctl_x_map, ctl_x_4_map)
+        call syms_of_view()
         call syms_of_dired_mode(ctl_x_map, ctl_x_4_map)
         call syms_of_isearch(global_map)
         ! The minibuffer: minibuffer-local-map's keys from minibuffer.el,

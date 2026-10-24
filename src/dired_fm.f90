@@ -31,14 +31,16 @@ module dired_fm
     use error_fm, only: status_type, set_error, FM_WRONG_TYPE_ARGUMENT
     use lisp_fm, only: value_type, make_string, make_list, nil, t_value
     use fileio_fm, only: expand_file_name, directory_file_name, file_name_as_directory, report_file_errno, &
-                         file_directory_p
+                         file_directory_p, file_attributes, file_stat_type
     use minibuf_fm, only: completion_ignore_case, completion_predicate
     use fns_fm, only: compare_strings, COMPARE_EQUAL, schars, substring
-    use sysdep_fm, only: sys_string_type, emacs_directory_entries
+    use sysdep_fm, only: sys_string_type, emacs_directory_entries, system_user_names, system_group_names, &
+                         passwd_name_of_user, user_name_of_uid, group_name_of_gid
     implicit none(type, external)
     private
 
-    public :: directory_files, file_name_completion, file_name_all_completions
+    public :: directory_files, file_name_completion, file_name_all_completions, system_users, system_groups, &
+              file_attribute_names
 
     !> Completion ignores file names ending in any string in this array.
     !> It does not ignore them if all possible completions end in one of
@@ -325,4 +327,77 @@ contains
         end if
         result = make_string(substring(bestmatch, 0_int64, bestmatchsize))
     end subroutine file_name_completion_1
+
+    !> Return a list of user names currently registered in the system.
+    !> If we don't know how to determine that on this platform, just
+    !> return a list with one element, taken from `user_real_login_name'.
+    !> Port of dired.c:Fsystem_users.
+    subroutine system_users(users)
+        type(value_type), intent(out) :: users
+        type(sys_string_type), allocatable :: names(:)
+        type(value_type), allocatable :: elems(:)
+        character(len=:), allocatable :: me
+        logical :: found
+        integer :: k, n
+        call system_user_names(names)
+        n = size(names)
+        if (n == 0) then
+            ! At least current user is always known.
+            call passwd_name_of_user(me, found)
+            allocate (elems(1))
+            elems(1) = make_string(me)
+            users = make_list(elems)
+            return
+        end if
+        allocate (elems(n))
+        ! Consed: the last entry first.
+        do k = 1, n
+            elems(k) = make_string(names(n + 1 - k)%s)
+        end do
+        users = make_list(elems)
+    end subroutine system_users
+
+    !> Return a list of user group names currently registered in the system.
+    !> The value may be empty if not supported on this platform.  Port of
+    !> dired.c:Fsystem_groups.
+    subroutine system_groups(groups)
+        type(value_type), intent(out) :: groups
+        type(sys_string_type), allocatable :: names(:)
+        type(value_type), allocatable :: elems(:)
+        integer :: k, n
+        call system_group_names(names)
+        n = size(names)
+        allocate (elems(n))
+        do k = 1, n
+            elems(k) = make_string(names(n + 1 - k)%s)
+        end do
+        groups = make_list(elems)
+    end subroutine system_groups
+
+    !> The owner and group of FILENAME (not following a symbolic link) as
+    !> names, as `file_attributes' gives them with ID-FORMAT `string': a
+    !> number in decimal when the id has no name.  FOUND is false if the
+    !> file does not exist.  Part of dired.c:Ffile_attributes.
+    subroutine file_attribute_names(filename, user, group, found)
+        character(len=*), intent(in) :: filename
+        character(len=:), allocatable, intent(out) :: user, group
+        logical, intent(out) :: found
+        type(file_stat_type) :: st
+        character(len=12) :: num
+        logical :: named
+        user = ""
+        group = ""
+        call file_attributes(filename, st, found, nofollow=.true.)
+        if (.not. found) return
+        call user_name_of_uid(st%uid, user, named)
+        if (.not. named) then
+            write (num, "(i0)") st%uid
+            user = trim(num)
+        end if
+        call group_name_of_gid(st%gid, group, named)
+        if (.not. named) then
+            write (num, "(i0)") st%gid
+            group = trim(num)
+        end if
+    end subroutine file_attribute_names
 end module dired_fm

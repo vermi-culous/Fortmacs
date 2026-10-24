@@ -37,6 +37,10 @@
 !> - wait status bits: glibc bits/waitstatus.h
 !> - struct dirent: glibc bits/dirent.h (d_name at byte 19 on both);  struct
 !>   tm: glibc bits/types/struct_tm.h (nine ints, then tm_gmtoff and tm_zone)
+!> - struct timespec: two longs;  struct group: glibc grp.h (two pointers,
+!>   a 32-bit id, a pointer)
+!> - O_CREAT, O_EXCL, O_TRUNC: asm-generic/fcntl.h;  RENAME_NOREPLACE:
+!>   linux/fs.h;  UTIME_NOW, UTIME_OMIT: linux/stat.h
 !> - threads (glibc >= 2.34 has them in libc itself): pthread_t is an
 !>   unsigned long; pthread_mutex_t is 40 bytes on x86-64 and 48 on
 !>   aarch64, so mutexes are 64-byte arrays, and PTHREAD_MUTEX_INITIALIZER
@@ -49,8 +53,8 @@
 !> That is safe on both targets: aarch64 Linux (standard AAPCS64, unlike
 !> Apple's) passes variadic arguments like fixed ones, and on x86-64 the
 !> only difference is %al, which glibc's prologue merely tests to decide
-!> whether to spill vector registers.  `open' is never given O_CREAT here,
-!> so it never reads a mode argument; files are created with `creat'.
+!> whether to spill vector registers.  `c_open' never gives O_CREAT;
+!> `c_open_mode' passes the mode open reads with O_CREAT.
 !> O_DIRECTORY differs between the two targets, so it is not used.
 module sys_linux_fm
     use, intrinsic :: iso_c_binding, only: c_int, c_signed_char, c_int16_t, c_int32_t, c_int64_t, &
@@ -141,6 +145,9 @@ module sys_linux_fm
     integer(c_int), parameter, public :: O_NOCTTY = int(o'0000400', c_int)
     integer(c_int), parameter, public :: O_NONBLOCK = int(o'0004000', c_int)
     integer(c_int), parameter, public :: O_CLOEXEC = int(o'2000000', c_int)
+    integer(c_int), parameter, public :: O_CREAT = int(o'0000100', c_int)
+    integer(c_int), parameter, public :: O_EXCL = int(o'0000200', c_int)
+    integer(c_int), parameter, public :: O_TRUNC = int(o'0001000', c_int)
     ! access modes
     integer(c_int), parameter, public :: F_OK = 0, X_OK = 1, W_OK = 2, R_OK = 4
     ! *at() directory argument for the current directory
@@ -149,6 +156,11 @@ module sys_linux_fm
     integer(c_int), parameter, public :: AT_STATX_SYNC_AS_STAT = 0
     integer(c_int), parameter, public :: AT_SYMLINK_NOFOLLOW = int(z'100', c_int)
     integer(c_int), parameter, public :: STATX_BASIC_STATS = int(z'7FF', c_int)
+    ! renameat2 flags (linux/fs.h)
+    integer(c_int), parameter, public :: RENAME_NOREPLACE = 1
+    ! utimensat special nanoseconds (linux/stat.h)
+    integer(c_long), parameter, public :: UTIME_NOW = int(z'3FFFFFFF', c_long), &
+                                          UTIME_OMIT = int(z'3FFFFFFE', c_long)
     ! poll events
     integer(c_short), parameter, public :: POLLIN = 1_c_short
     integer(c_short), parameter, public :: POLLHUP = 16_c_short, POLLERR = 8_c_short
@@ -168,7 +180,7 @@ module sys_linux_fm
     ! errno
     integer(c_int), parameter, public :: ENOENT = 2, EINTR = 4, EAGAIN = 11, &
                                          EACCES = 13, EEXIST = 17, ENOTDIR = 20, &
-                                         EISDIR = 21, ERANGE = 34
+                                         EISDIR = 21, ERANGE = 34, EXDEV = 18, EINVAL = 22, ENOTSUP = 95
     integer(c_int), parameter, public :: EIO = 5, ECHILD = 10, EPIPE = 32, ENOSYS = 38
     ! file type bits of st_mode (bits/stat.h)
     integer(c_int), parameter, public :: S_IFMT = int(o'170000', c_int)
@@ -228,6 +240,22 @@ module sys_linux_fm
         integer(c_int32_t) :: pw_gid = 0
         type(c_ptr) :: pw_gecos, pw_dir, pw_shell
     end type passwd_type
+
+    !> struct group.
+    type, bind(C), public :: group_type
+        type(c_ptr) :: gr_name, gr_passwd
+        integer(c_int32_t) :: gr_gid = 0
+        type(c_ptr) :: gr_mem
+    end type group_type
+
+    !> struct timespec.
+    type, bind(C), public :: timespec_type
+        integer(c_long) :: tv_sec = 0
+        integer(c_long) :: tv_nsec = 0
+    end type timespec_type
+
+    public :: c_open_mode, c_link, c_renameat2, c_utimensat, c_futimens, c_umask, c_fchmod, c_fchmodat, &
+              c_fchown, c_getgrgid, c_setpwent, c_getpwent, c_endpwent, c_setgrent, c_getgrent, c_endgrent
 
     public :: c_tcgetattr, c_tcsetattr, c_read, c_write, c_close, c_isatty, &
               c_poll, c_ioctl_winsize, c_signal, c_raise, c_posix_openpt, &
@@ -569,6 +597,98 @@ module sys_linux_fm
             integer(c_int), value :: flags
         end function c_mkostemp
 
+        integer(c_int) function c_open_mode(path, flags, mode) bind(C, name="open")
+            import :: c_int, c_char
+            implicit none(type, external)
+            character(kind=c_char), intent(in) :: path(*)
+            integer(c_int), value :: flags, mode
+        end function c_open_mode
+
+        integer(c_int) function c_link(old, new) bind(C, name="link")
+            import :: c_int, c_char
+            implicit none(type, external)
+            character(kind=c_char), intent(in) :: old(*), new(*)
+        end function c_link
+
+        integer(c_int) function c_renameat2(olddirfd, old, newdirfd, new, flags) bind(C, name="renameat2")
+            import :: c_int, c_char
+            implicit none(type, external)
+            integer(c_int), value :: olddirfd, newdirfd, flags
+            character(kind=c_char), intent(in) :: old(*), new(*)
+        end function c_renameat2
+
+        integer(c_int) function c_utimensat(dirfd, path, times, flags) bind(C, name="utimensat")
+            import :: c_int, c_char, timespec_type
+            implicit none(type, external)
+            integer(c_int), value :: dirfd, flags
+            character(kind=c_char), intent(in) :: path(*)
+            type(timespec_type), intent(in) :: times(2)
+        end function c_utimensat
+
+        integer(c_int) function c_futimens(fd, times) bind(C, name="futimens")
+            import :: c_int, timespec_type
+            implicit none(type, external)
+            integer(c_int), value :: fd
+            type(timespec_type), intent(in) :: times(2)
+        end function c_futimens
+
+        integer(c_int32_t) function c_umask(mask) bind(C, name="umask")
+            import :: c_int32_t
+            implicit none(type, external)
+            integer(c_int32_t), value :: mask
+        end function c_umask
+
+        integer(c_int) function c_fchmod(fd, mode) bind(C, name="fchmod")
+            import :: c_int
+            implicit none(type, external)
+            integer(c_int), value :: fd, mode
+        end function c_fchmod
+
+        integer(c_int) function c_fchmodat(dirfd, path, mode, flags) bind(C, name="fchmodat")
+            import :: c_int, c_char
+            implicit none(type, external)
+            integer(c_int), value :: dirfd, mode, flags
+            character(kind=c_char), intent(in) :: path(*)
+        end function c_fchmodat
+
+        integer(c_int) function c_fchown(fd, owner, group) bind(C, name="fchown")
+            import :: c_int, c_int32_t
+            implicit none(type, external)
+            integer(c_int), value :: fd
+            integer(c_int32_t), value :: owner, group
+        end function c_fchown
+
+        type(c_ptr) function c_getgrgid(gid) bind(C, name="getgrgid")
+            import :: c_ptr, c_int32_t
+            implicit none(type, external)
+            integer(c_int32_t), value :: gid
+        end function c_getgrgid
+
+        subroutine c_setpwent() bind(C, name="setpwent")
+            implicit none(type, external)
+        end subroutine c_setpwent
+
+        type(c_ptr) function c_getpwent() bind(C, name="getpwent")
+            import :: c_ptr
+            implicit none(type, external)
+        end function c_getpwent
+
+        subroutine c_endpwent() bind(C, name="endpwent")
+            implicit none(type, external)
+        end subroutine c_endpwent
+
+        subroutine c_setgrent() bind(C, name="setgrent")
+            implicit none(type, external)
+        end subroutine c_setgrent
+
+        type(c_ptr) function c_getgrent() bind(C, name="getgrent")
+            import :: c_ptr
+            implicit none(type, external)
+        end function c_getgrent
+
+        subroutine c_endgrent() bind(C, name="endgrent")
+            implicit none(type, external)
+        end subroutine c_endgrent
         !> pthread_create(thread, NULL, start, arg).
         integer(c_int) function c_pthread_create(thread, attr, start, arg) bind(C, name="pthread_create")
             import :: c_int, c_long, c_ptr, c_funptr

@@ -19,7 +19,8 @@
 ! You should have received a copy of the GNU General Public License
 ! along with Fortmacs.  If not, see <https://www.gnu.org/licenses/>.
 
-!> The minibuffer readers of subr.el (`read_number', `y_or_n_p'): a
+!> The minibuffer readers of subr.el (`read_number', `y_or_n_p',
+!> `read_char_from_minibuffer', `read_char_choice'): a
 !> submodule because minibuf_fm uses subr_fm.
 submodule(subr_fm) subr_read_fm
     use commands_fm, only: commands
@@ -35,11 +36,31 @@ submodule(subr_fm) subr_read_fm
     use lisp_fm, only: make_fixnum
     use insdel_fm, only: insert
     use dispnew_fm, only: ding
-    use window_fm, only: recenter, scroll_up_command, scroll_down_command
+    use window_fm, only: recenter, scroll_up_command, scroll_down_command, window_configuration_type, &
+                         current_window_configuration, set_window_configuration, free_window_configuration
+    use character_fm, only: char_string, MAX_MULTIBYTE_LENGTH
+    use keyboard_fm, only: last_command_event, last_command
+    use keymap_fm, only: single_key_description
+    use buffer_fm, only: get_buffer, buffer_live_p, kill_buffer
+    use help_fm, only: with_output_to_temp_buffer, substitute_command_keys
+    use rmc_fm, only: read_char_choice_use_read_key
+    use error_fm, only: format_message, FM_GENERIC_ERROR
     implicit none(type, external)
 
     !> y-or-n-p-map, made by `init_y_or_n_p_map'.
     type(handle_type) :: y_or_n_p_map
+
+    !> read-char-from-minibuffer-map, made by
+    !> `init_read_char_from_minibuffer_map'.
+    type(handle_type) :: read_char_from_minibuffer_map
+
+    !> The `help_form' of the `read_char_from_minibuffer' in progress
+    !> (unallocated for none).
+    character(len=:), allocatable :: rcfm_help_form
+
+    !> The character that shows the help form: `help_char''s standard value,
+    !> C-h (the variable itself is not ported).
+    integer, parameter :: HELP_CHAR = 8
 
 contains
 
@@ -496,6 +517,247 @@ contains
     ! The map is made again on first use (its parent and the global map
     ! may have been rebuilt).
     if (keymap_live_p(y_or_n_p_map)) call free_keymap(y_or_n_p_map, st)
+    commands%read_char_from_minibuffer_insert_char%run => read_char_from_minibuffer_insert_char
+    commands%read_char_from_minibuffer_insert_other%run => read_char_from_minibuffer_insert_other
+    commands%help_form_show%run => help_form_show
+    if (keymap_live_p(read_char_from_minibuffer_map)) call free_keymap(read_char_from_minibuffer_map, st)
     end procedure syms_of_subr
 
+    !> Make `read_char_from_minibuffer_map': minibuffer-local-map's keys,
+    !> with the minibuffer's own recentering and scrolling commands, and
+    !> RET rejected.  Port of subr.el read-char-from-minibuffer-map
+    !> (minibuffer-scroll-other-window and -down are not ported).
+    subroutine init_read_char_from_minibuffer_map()
+        type(status_type) :: st
+        if (keymap_live_p(read_char_from_minibuffer_map)) return
+        call make_sparse_keymap(read_char_from_minibuffer_map)
+        call set_keymap_parent(read_char_from_minibuffer_map, minibuffer_local_map, st)
+        call define_remap(read_char_from_minibuffer_map, "exit_minibuffer", "read_char_from_minibuffer_insert_other")
+        call define_remap(read_char_from_minibuffer_map, "recenter_top_bottom", "minibuffer_recenter_top_bottom")
+        call define_remap(read_char_from_minibuffer_map, "scroll_up_command", "minibuffer_scroll_up_command")
+        call define_remap(read_char_from_minibuffer_map, "scroll_down_command", "minibuffer_scroll_down_command")
+    end subroutine init_read_char_from_minibuffer_map
+
+    !> (define-key MAP [remap FROM] TO).
+    subroutine define_remap(map, from, to)
+        type(handle_type), intent(in) :: map
+        character(len=*), intent(in) :: from, to
+        type(value_type) :: events(2)
+        type(status_type) :: st
+        events(1) = sym("remap")
+        events(2) = sym(from)
+        call define_key(map, events, sym(to), st)
+    end subroutine define_remap
+
+    module procedure read_char_from_minibuffer
+    type(handle_type) :: map
+    type(value_type) :: key1(1), saved_this
+    type(status_type) :: st
+    character(len=:), allocatable :: result, saved_help
+    character(len=MAX_MULTIBYTE_LENGTH) :: buf
+    integer(int32) :: ch, clen, nbytes
+    integer :: k
+    logical :: had_help
+    c = 13
+    call init_read_char_from_minibuffer_map()
+    had_help = allocated(rcfm_help_form)
+    if (had_help) saved_help = rcfm_help_form
+    if (present(help_form)) rcfm_help_form = help_form
+    if (present(chars)) then
+        call make_sparse_keymap(map)
+        call set_keymap_parent(map, read_char_from_minibuffer_map, st)
+        ! If we have a `help_form' here, then the `C-h' (i.e.,
+        ! `help_char') character should output that instead of being a
+        ! command char.
+        if (present(help_form)) then
+            key1(1) = make_fixnum(int(HELP_CHAR, int64))
+            call define_key(map, key1, sym("help_form_show"), st)
+        end if
+        do k = 1, size(chars)
+            key1(1) = make_fixnum(int(chars(k), int64))
+            call define_key(map, key1, sym("read_char_from_minibuffer_insert_char"), st)
+        end do
+        call define_remap(map, "self_insert_command", "read_char_from_minibuffer_insert_other")
+    else
+        map = read_char_from_minibuffer_map
+    end if
+    ! Protect this-command when called from pre-command-hook (bug#45029)
+    saved_this = this_command
+    if (present(history)) then
+        call read_from_minibuffer(prompt, result, status, keymap=map, history=history)
+    else
+        call read_from_minibuffer(prompt, result, status, keymap=map, history="t")
+    end if
+    this_command = saved_this
+    if (present(chars)) call free_keymap(map, st)
+    if (had_help) then
+        rcfm_help_form = saved_help
+    else if (allocated(rcfm_help_form)) then
+        deallocate (rcfm_help_form)
+    end if
+    if (.not. status%ok()) return
+    if (len(result) > 0) then
+        ! We have a string (with one character), so return the first one.
+        call string_char_and_length(result, 1_int64, ch, clen)
+        c = ch
+    else
+        ! The default value is RET.  (Pushing "\r" on HISTORY is not
+        ! ported: a history is a minibuffer variable here.)
+        c = 13
+    end if
+    ! Display the question with the answer.
+    call char_string(int(c, int32), buf, nbytes, st)
+    call message(prompt//buf(1:nbytes))
+    end procedure read_char_from_minibuffer
+
+    !> Insert the character you type into the minibuffer and exit minibuffer.
+    !> Discard all previous input before inserting and exiting the minibuffer.
+    !> Port of subr.el:read-char-from-minibuffer-insert-char.
+    subroutine read_char_from_minibuffer_insert_char(status)
+        type(status_type), intent(out) :: status
+        character(len=MAX_MULTIBYTE_LENGTH) :: buf
+        type(status_type) :: st
+        integer(int32) :: nbytes
+        status = status_type()
+        if (.not. minibufferp()) return
+        call delete_minibuffer_contents(status)
+        if (.not. status%ok()) return
+        if (fixnump(last_command_event)) then
+            call char_string(int(xfixnum(last_command_event), int32), buf, nbytes, st)
+            if (st%ok()) call insert(buf(1:nbytes), status)
+            if (.not. status%ok()) return
+        end if
+        call exit_minibuffer(status)
+    end subroutine read_char_from_minibuffer_insert_char
+
+    !> Reject a disallowed character typed into the minibuffer.
+    !> This command is intended to be bound to keys that users are not
+    !> allowed to type into the minibuffer.  When the user types any
+    !> such key, this command discard all minibuffer input and displays
+    !> an error message.  Port of
+    !> subr.el:read-char-from-minibuffer-insert-other.
+    subroutine read_char_from_minibuffer_insert_other(status)
+        type(status_type), intent(out) :: status
+        status = status_type()
+        if (.not. minibufferp()) return
+        call delete_minibuffer_contents(status)
+        if (.not. status%ok()) return
+        call ding()
+        call discard_input()
+        call minibuffer_message("Wrong answer")
+        call sit_for(2000)
+    end subroutine read_char_from_minibuffer_insert_other
+
+    !> Display the output of a `help_form' (the text bound by the
+    !> caller).  Port of help.el:help-form-show.
+    subroutine help_form_show(status)
+        type(status_type), intent(out) :: status
+        status = status_type()
+        if (.not. allocated(rcfm_help_form)) return
+        call with_output_to_temp_buffer(" *Char Help*", rcfm_help_form, status)
+    end subroutine help_form_show
+
+    module procedure read_char_choice
+    type(value_type) :: saved_last
+    if (.not. read_char_choice_use_read_key) then
+        ! We are about to enter recursive-edit, which sets
+        ! `last_command'.  If the callers of this function have some
+        ! logic based on `last_command''s value (example: `kill_region'),
+        ! that could interfere with their logic.  So we let-bind
+        ! `last_command' here to prevent that.
+        saved_last = last_command
+        call read_char_from_minibuffer(prompt, c, status, chars=chars, help_form=help_form)
+        last_command = saved_last
+    else
+        call read_char_choice_with_read_key(prompt, chars, c, status, inhibit_keyboard_quit, help_form)
+    end if
+    end procedure read_char_choice
+
+    !> Read and return one of the characters in CHARS, prompting with PROMPT.
+    !> CHARS should be a list of single characters.
+    !> Any input that is not one of CHARS is ignored.
+    !>
+    !> If optional argument INHIBIT_KEYBOARD_QUIT is true, ignore
+    !> `keyboard_quit' events while waiting for valid input.
+    !>
+    !> If HELP_FORM is present, then pressing `help_char' displays it.
+    !> Port of subr.el:read-char-choice-with-read-key (the prompt is not
+    !> given the `minibuffer_prompt' face; C-g is read as a character, not
+    !> as a quit).
+    recursive subroutine read_char_choice_with_read_key(prompt, chars, c, status, inhibit_keyboard_quit, help_form)
+        character(len=*), intent(in) :: prompt
+        integer, intent(in) :: chars(:)
+        integer, intent(out) :: c
+        type(status_type), intent(out) :: status
+        logical, intent(in), optional :: inhibit_keyboard_quit
+        character(len=*), intent(in), optional :: help_form
+        type(window_configuration_type) :: config
+        type(value_type) :: key
+        type(handle_type) :: helpbuf
+        character(len=:), allocatable :: please
+        character(len=MAX_MULTIBYTE_LENGTH) :: buf
+        type(status_type) :: st
+        integer(int32) :: nbytes
+        logical :: done, show_help, esc_flag, inhibit, saved_cursor
+        integer :: k
+        status = status_type()
+        c = 0
+        inhibit = .false.
+        if (present(inhibit_keyboard_quit)) inhibit = inhibit_keyboard_quit
+        if (size(chars) == 0) then
+            call set_error(status, FM_GENERIC_ERROR, format_message("Called `read_char_choice' without valid char choices"))
+            return
+        end if
+        done = .false.
+        show_help = .false.
+        esc_flag = .false.
+        saved_cursor = cursor_in_echo_area
+        cursor_in_echo_area = .true.
+        ! in case we call help-form-show
+        call current_window_configuration(config)
+        do while (.not. done)
+            call read_key(prompt, key, status)
+            if (.not. status%ok()) exit
+            if (show_help) then
+                helpbuf = get_buffer(" *Char Help*")
+                if (buffer_live_p(helpbuf)) call kill_buffer(helpbuf, st)
+            end if
+            if (.not. fixnump(key)) cycle
+            c = int(xfixnum(key))
+            ! If caller has set help-form, that's enough.
+            ! They don't explicitly have to add help-char to chars.
+            if (present(help_form) .and. c == HELP_CHAR) then
+                show_help = .true.
+                call with_output_to_temp_buffer(" *Char Help*", help_form, st)
+                cycle
+            end if
+            if (any(chars == c)) then
+                done = .true.
+            else if (.not. inhibit) then
+                if (.not. esc_flag .and. c == 27) then
+                    esc_flag = .true.
+                else if (c == 7 .or. c == 27) then
+                    call set_error(status, FM_QUIT)
+                    exit
+                end if
+            else
+                call ding()
+                please = ""
+                do k = 1, size(chars)
+                    if (k > 1) please = please//", "
+                    please = please//"\`"//single_key_description(make_fixnum(int(chars(k), int64)))//"'"
+                end do
+                call message("Please type "//substitute_command_keys(please))
+                call sit_for(3000)
+            end if
+        end do
+        call set_window_configuration(config)
+        call free_window_configuration(config)
+        cursor_in_echo_area = saved_cursor
+        if (.not. status%ok()) return
+        ! Display the question with the answer.  But without
+        ! cursor-in-echo-area.
+        call char_string(int(c, int32), buf, nbytes, st)
+        call message(prompt//buf(1:nbytes))
+    end subroutine read_char_choice_with_read_key
 end submodule subr_read_fm

@@ -42,7 +42,7 @@ module minibuf_fm
     use lread_fm, only: sym
     use data_fm, only: set, symbol_value, kill_all_local_variables, logical_setting
     use buffer_fm, only: buffers, cur, current_buffer, set_buffer, get_buffer_create, &
-                         erase_buffer, resolve_buffer
+                         erase_buffer, resolve_buffer, inhibit_read_only
     use insdel_fm, only: insert
     use editfns_fm, only: field_end, buffer_substring, goto_char
     use textprop_fm, only: add_text_properties, get_text_property
@@ -349,7 +349,7 @@ contains
         type(window_configuration_type) :: config
         type(window_type), pointer :: sw, mw
         type(status_type) :: st, edit_status
-        type(value_type) :: histval
+        type(value_type) :: histval, saved_inhibit
         character(len=:), allocatable :: ambient_dir, saved_histvar, histvar, saved_before, histstring
         type(minibuffer_string_type), allocatable :: saved_default(:)
         integer(int64) :: saved_goal
@@ -428,6 +428,8 @@ contains
         selected_frame%minibuffer_selected = .true.
         mw%hscroll = 0
         ! Erase the buffer.
+        ! (specbind Qinhibit_read_only Qnil), restored on exit
+        saved_inhibit = inhibit_read_only()
         call set(sym("inhibit_read_only"), t_value(), st)
         call erase_buffer(st)
         buffers(cur)%multibyte = .true.
@@ -493,7 +495,7 @@ contains
         minibuf_level = minibuf_level - 1
         call set(sym("inhibit_read_only"), t_value(), st)
         call erase_buffer(st)
-        call set(sym("inhibit_read_only"), nil(), st)
+        call set(sym("inhibit_read_only"), saved_inhibit, st)
         minibuffer_calling_buffer = saved_calling
         selected_frame%minibuffer_selected = old_selected
         ! (Windows may have been made meanwhile: fetch them again.)

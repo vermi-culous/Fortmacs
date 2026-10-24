@@ -50,7 +50,11 @@ module sysdep_fm
                             S_IFREG, c_fork, c_dup2, c_chdir, c_exit, c_pipe2, &
                             c_waitpid, c_readlink, c_execv, c_strsignal, c_mkostemp, &
                             O_WRONLY, c_opendir, c_readdir, c_closedir, c_symlink, c_localtime_r, &
-                            tm_type, c_setsid, c_kill, c_ioctl_int, c_fcntl_int, SIGQUIT, SIGPIPE, &
+                            tm_type, c_open_mode, c_link, c_renameat2, c_utimensat, c_futimens, c_umask, &
+                            c_fchmod, c_fchmodat, c_fchown, c_getgrgid, c_setpwent, c_getpwent, c_endpwent, &
+                            c_setgrent, c_getgrent, c_endgrent, group_type, timespec_type, O_CREAT, O_EXCL, &
+                            O_TRUNC, RENAME_NOREPLACE, UTIME_NOW, EXDEV, EINVAL, ENOSYS, ENOTSUP, &
+                            c_setsid, c_kill, c_ioctl_int, c_fcntl_int, SIGQUIT, SIGPIPE, &
                             TIOCSCTTY, F_SETFD, FD_CLOEXEC, F_GETFL, F_SETFL, O_NONBLOCK, EAGAIN, &
                             TCSANOW, OPOST, OLCUC, NLDLY, CRDLY, BSDLY, VTDLY, FFDLY, IUCLC, CSIZE, &
                             VERASE, VKILL, VEOF, EPIPE, F_DUPFD_CLOEXEC, c_execve, c_sched_getaffinity, c_time, &
@@ -82,6 +86,10 @@ module sysdep_fm
     public :: sys_string_type, emacs_spawn, wait_for_termination, emacs_pipe, emacs_strsignal, &
               emacs_readlink, emacs_execv, emacs_mkostemp, emacs_directory_entries, sys_symlink, &
               emacs_localtime, emacs_statvfs
+    public :: emacs_open_mode, sys_link, sys_rename_noreplace, sys_set_file_times, sys_futimens, emacs_umask, &
+              sys_fchmod, sys_chmod_at, sys_fchown, group_name_of_gid, user_name_of_uid, system_user_names, &
+              system_group_names
+    public :: O_WRONLY, O_CREAT, O_EXCL, O_TRUNC, UTIME_NOW, EXDEV, EINVAL, ENOSYS, ENOTSUP
     public :: emacs_spawn_async, child_setup_tty, emacs_kill, ignore_sigpipe, emacs_write_nonblock, &
               set_nonblocking, emacs_dup_cloexec, inputs_available, emacs_num_processors, emacs_time, &
               emacs_localtime_wday
@@ -107,6 +115,8 @@ module sysdep_fm
         integer(int64) :: size = 0
         integer(int64) :: mtime_sec = 0
         integer(int32) :: mtime_nsec = 0
+        integer(int64) :: atime_sec = 0
+        integer(int32) :: atime_nsec = 0
         integer(int64) :: dev = 0, ino = 0
     end type file_stat_type
 
@@ -586,6 +596,8 @@ contains
         st%size = sx%stx_size
         st%mtime_sec = sx%stx_mtime%tv_sec
         st%mtime_nsec = sx%stx_mtime%tv_nsec
+        st%atime_sec = sx%stx_atime%tv_sec
+        st%atime_nsec = sx%stx_atime%tv_nsec
         st%dev = ior(shiftl(int(sx%stx_dev_major, int64), 32), &
                      iand(int(sx%stx_dev_minor, int64), int(z'FFFFFFFF', int64)))
         st%ino = sx%stx_ino
@@ -1373,6 +1385,184 @@ contains
         p = c_localtime_r(seconds, tm)
         parts = [tm%tm_year + 1900, tm%tm_mon + 1, tm%tm_mday, tm%tm_hour, tm%tm_min, tm%tm_sec]
     end function emacs_localtime
+
+    !> Open `file' with `flags' (O_WRONLY with O_CREAT, O_EXCL or O_TRUNC)
+    !> and, when it is created, permission bits `mode' (before the umask),
+    !> close-on-exec, retrying on EINTR.  Cf. sysdep.c:emacs_open.
+    integer(int32) function emacs_open_mode(file, flags, mode, fd) result(err)
+        character(len=*), intent(in) :: file
+        integer(int32), intent(in) :: flags, mode
+        integer(int32), intent(out) :: fd
+        err = 0
+        do
+            fd = c_open_mode(c_path(file), ior(flags, O_CLOEXEC), mode)
+            if (fd >= 0) return
+            err = errno()
+            if (err /= EINTR) return
+        end do
+    end function emacs_open_mode
+
+    !> link(2).
+    integer(int32) function sys_link(old, new) result(err)
+        character(len=*), intent(in) :: old, new
+        err = 0
+        if (c_link(c_path(old), c_path(new)) /= 0) err = errno()
+    end function sys_link
+
+    !> Rename `old' to `new' unless `new' exists (renameat2 with
+    !> RENAME_NOREPLACE).  Cf. sysdep.c:renameat_noreplace.
+    integer(int32) function sys_rename_noreplace(old, new) result(err)
+        character(len=*), intent(in) :: old, new
+        err = 0
+        if (c_renameat2(AT_FDCWD, c_path(old), AT_FDCWD, c_path(new), RENAME_NOREPLACE) /= 0) err = errno()
+    end function sys_rename_noreplace
+
+    !> Set the access and modification times of `file' (a nanoseconds
+    !> value of UTIME_NOW means the current time), the link itself if
+    !> `nofollow' (utimensat(2)).
+    integer(int32) function sys_set_file_times(file, atime_sec, atime_nsec, mtime_sec, mtime_nsec, nofollow) result(err)
+        character(len=*), intent(in) :: file
+        integer(int64), intent(in) :: atime_sec, mtime_sec
+        integer(int32), intent(in) :: atime_nsec, mtime_nsec
+        logical, intent(in) :: nofollow
+        type(timespec_type) :: ts(2)
+        integer(c_int) :: flags
+        err = 0
+        ts(1)%tv_sec = atime_sec
+        ts(1)%tv_nsec = atime_nsec
+        ts(2)%tv_sec = mtime_sec
+        ts(2)%tv_nsec = mtime_nsec
+        flags = 0
+        if (nofollow) flags = AT_SYMLINK_NOFOLLOW
+        if (c_utimensat(AT_FDCWD, c_path(file), ts, flags) /= 0) err = errno()
+    end function sys_set_file_times
+
+    !> futimens(2): the access and modification times of open file `fd'.
+    integer(int32) function sys_futimens(fd, atime_sec, atime_nsec, mtime_sec, mtime_nsec) result(err)
+        integer(int32), intent(in) :: fd
+        integer(int64), intent(in) :: atime_sec, mtime_sec
+        integer(int32), intent(in) :: atime_nsec, mtime_nsec
+        type(timespec_type) :: ts(2)
+        err = 0
+        ts(1)%tv_sec = atime_sec
+        ts(1)%tv_nsec = atime_nsec
+        ts(2)%tv_sec = mtime_sec
+        ts(2)%tv_nsec = mtime_nsec
+        if (c_futimens(fd, ts) /= 0) err = errno()
+    end function sys_futimens
+
+    !> The process's file mode creation mask (umask(2), set back at once).
+    integer(int32) function emacs_umask() result(mask)
+        integer(c_int32_t) :: old, zero
+        old = c_umask(0_c_int32_t)
+        zero = c_umask(old)
+        mask = old
+    end function emacs_umask
+
+    !> fchmod(2).
+    integer(int32) function sys_fchmod(fd, mode) result(err)
+        integer(int32), intent(in) :: fd, mode
+        err = 0
+        if (c_fchmod(fd, mode) /= 0) err = errno()
+    end function sys_fchmod
+
+    !> Set the permission bits of `file', of the link itself if
+    !> `nofollow' (fchmodat(2)).  Cf. sysdep.c:emacs_fchmodat.
+    integer(int32) function sys_chmod_at(file, mode, nofollow) result(err)
+        character(len=*), intent(in) :: file
+        integer(int32), intent(in) :: mode
+        logical, intent(in) :: nofollow
+        integer(c_int) :: flags
+        err = 0
+        flags = 0
+        if (nofollow) flags = AT_SYMLINK_NOFOLLOW
+        if (c_fchmodat(AT_FDCWD, c_path(file), mode, flags) /= 0) err = errno()
+    end function sys_chmod_at
+
+    !> fchown(2); -1 leaves the owner or group as it is.
+    integer(int32) function sys_fchown(fd, uid, gid) result(err)
+        integer(int32), intent(in) :: fd, uid, gid
+        err = 0
+        if (c_fchown(fd, uid, gid) /= 0) err = errno()
+    end function sys_fchown
+
+    !> The name of group `gid' (getgrgid(3)); `found' is false if it has
+    !> no entry.
+    subroutine group_name_of_gid(gid, name, found)
+        integer(int32), intent(in) :: gid
+        character(len=:), allocatable, intent(out) :: name
+        logical, intent(out) :: found
+        type(c_ptr) :: p
+        type(group_type), pointer :: gr
+        p = c_getgrgid(gid)
+        found = c_associated(p)
+        name = ""
+        if (.not. found) return
+        call c_f_pointer(p, gr)
+        name = c_string_to_fortran(gr%gr_name)
+    end subroutine group_name_of_gid
+
+    !> The login name of user `uid' (getpwuid(3)); `found' is false if it
+    !> has no entry.
+    subroutine user_name_of_uid(uid, name, found)
+        integer(int32), intent(in) :: uid
+        character(len=:), allocatable, intent(out) :: name
+        logical, intent(out) :: found
+        type(c_ptr) :: p
+        type(passwd_type), pointer :: pw
+        p = c_getpwuid(uid)
+        found = c_associated(p)
+        name = ""
+        if (.not. found) return
+        call c_f_pointer(p, pw)
+        name = c_string_to_fortran(pw%pw_name)
+    end subroutine user_name_of_uid
+
+    !> The login names of all users of the password database, in its
+    !> order (getpwent(3)).  Cf. dired.c:Fsystem_users.
+    subroutine system_user_names(names)
+        type(sys_string_type), allocatable, intent(out) :: names(:)
+        type(sys_string_type), allocatable :: grown(:)
+        type(passwd_type), pointer :: pw
+        type(c_ptr) :: p
+        integer :: n
+        allocate (names(0))
+        call c_setpwent()
+        do
+            p = c_getpwent()
+            if (.not. c_associated(p)) exit
+            call c_f_pointer(p, pw)
+            n = size(names)
+            allocate (grown(n + 1))
+            grown(1:n) = names
+            grown(n + 1)%s = c_string_to_fortran(pw%pw_name)
+            call move_alloc(grown, names)
+        end do
+        call c_endpwent()
+    end subroutine system_user_names
+
+    !> The names of all groups of the group database, in its order
+    !> (getgrent(3)).  Cf. dired.c:Fsystem_groups.
+    subroutine system_group_names(names)
+        type(sys_string_type), allocatable, intent(out) :: names(:)
+        type(sys_string_type), allocatable :: grown(:)
+        type(group_type), pointer :: gr
+        type(c_ptr) :: p
+        integer :: n
+        allocate (names(0))
+        call c_setgrent()
+        do
+            p = c_getgrent()
+            if (.not. c_associated(p)) exit
+            call c_f_pointer(p, gr)
+            n = size(names)
+            allocate (grown(n + 1))
+            grown(1:n) = names
+            grown(n + 1)%s = c_string_to_fortran(gr%gr_name)
+            call move_alloc(grown, names)
+        end do
+        call c_endgrent()
+    end subroutine system_group_names
 
     !> The file system holding `path': its total, free and available
     !> space in bytes (statvfs(3): blocks times the fragment size).

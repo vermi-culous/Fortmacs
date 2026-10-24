@@ -369,7 +369,7 @@ contains
         end if
         call make_symbolic_link(itoa(n), dir//"current.new", status, ok_if_already_exists=.true.)
         if (.not. status%ok()) return
-        call rename_file(dir//"current.new", dir//"current", status)
+        call rename_file(dir//"current.new", dir//"current", status, ok_if_already_exists=.true.)
     end subroutine switch_generation
 
     !> Go back to the generation before the current one: `from' was

@@ -258,6 +258,26 @@ module fortmacs
                              dired_warning_face, dired_perm_write_face, dired_directory_face, dired_symlink_face, &
                              dired_ignored_face
     use files_fm, only: insert_directory_program, find_file_run_dired, find_file_other_window, revert_buffer
+    ! Dired file operations (dired-aux.el) and View mode.
+    use dired_mode_fm, only: dired_chown_program, dired_touch_program, DIRED_KEEP_MARKER, dired_keep_marker_rename, &
+                             dired_keep_marker_copy, dired_keep_marker_hardlink, dired_keep_marker_symlink, &
+                             dired_keep_marker_relsymlink, dired_copy_preserve_time, dired_copy_dereference, &
+                             dired_recursive_copies, dired_dwim_target, DIRED_DWIM_TARGET_NIL, DIRED_DWIM_TARGET_NEXT, &
+                             DIRED_DWIM_TARGET_NEXT_VISIBLE, DIRED_DWIM_TARGET_RECENT, dired_create_destination_dirs, &
+                             DIRED_CREATE_DESTINATION_DIRS_NIL, DIRED_CREATE_DESTINATION_DIRS_ALWAYS, &
+                             DIRED_CREATE_DESTINATION_DIRS_ASK, dired_create_destination_dirs_on_trailing_dirsep, &
+                             dired_do_revert_buffer, dired_create_empty_file_in_current_directory, &
+                             dired_compress_file_default_suffix, dired_compress_directory_default_suffix, &
+                             dired_compress_suffix_type, dired_compress_rule_type, dired_compress_file_suffixes, &
+                             dired_compress_file_alist, dired_compress_files_alist
+    use files_fm, only: copy_directory, copy_directory_create_symlink, view_read_only, find_file_read_only, &
+                        find_file_read_only_other_window, make_empty_file, file_modes_symbolic_to_number, &
+                        file_modes_number_to_symbolic
+    use fileio_fm, only: copy_file, rename_file, add_name_to_file, make_symbolic_link, set_file_modes, set_file_times
+    use simple_fm, only: read_only_mode, read_only_mode_hook, what_line
+    use view_fm, only: view_mode, view_mode_map, view_mode_hook, view_file, view_file_other_window, view_buffer, &
+                       view_buffer_other_window, view_scroll_auto_exit, view_exits_all_viewing_windows, &
+                       view_inhibit_help_message, view_no_disable_on_exit
     ! Processes and shell commands.
     use process_fm, only: process_arg_type, process_filter_proc, process_sentinel_proc, make_process, start_process, &
                           delete_process, free_process, processp, process_live_p, get_process, get_buffer_process, &
@@ -421,4 +441,20 @@ module fortmacs
               dired_marked_face, dired_flagged_face, dired_warning_face, dired_perm_write_face, &
               dired_directory_face, dired_symlink_face, dired_ignored_face, insert_directory_program, &
               find_file_run_dired, find_file_other_window, revert_buffer
+    public :: dired_chown_program, dired_touch_program, DIRED_KEEP_MARKER, dired_keep_marker_rename, &
+              dired_keep_marker_copy, dired_keep_marker_hardlink, dired_keep_marker_symlink, dired_keep_marker_relsymlink, &
+              dired_copy_preserve_time, dired_copy_dereference, dired_recursive_copies, dired_dwim_target, &
+              DIRED_DWIM_TARGET_NIL, DIRED_DWIM_TARGET_NEXT, DIRED_DWIM_TARGET_NEXT_VISIBLE, DIRED_DWIM_TARGET_RECENT, &
+              dired_create_destination_dirs, DIRED_CREATE_DESTINATION_DIRS_NIL, DIRED_CREATE_DESTINATION_DIRS_ALWAYS, &
+              DIRED_CREATE_DESTINATION_DIRS_ASK, dired_create_destination_dirs_on_trailing_dirsep, &
+              dired_do_revert_buffer, dired_create_empty_file_in_current_directory, &
+              dired_compress_file_default_suffix, dired_compress_directory_default_suffix, dired_compress_suffix_type, &
+              dired_compress_rule_type, dired_compress_file_suffixes, dired_compress_file_alist, &
+              dired_compress_files_alist
+    public :: copy_directory, copy_directory_create_symlink, view_read_only, find_file_read_only, &
+              find_file_read_only_other_window, make_empty_file, file_modes_symbolic_to_number, &
+              file_modes_number_to_symbolic, copy_file, rename_file, add_name_to_file, make_symbolic_link, &
+              set_file_modes, set_file_times, read_only_mode, read_only_mode_hook, what_line, view_mode, view_mode_map, &
+              view_mode_hook, view_file, view_file_other_window, view_buffer, view_buffer_other_window, &
+              view_scroll_auto_exit, view_exits_all_viewing_windows, view_inhibit_help_message, view_no_disable_on_exit
 end module fortmacs

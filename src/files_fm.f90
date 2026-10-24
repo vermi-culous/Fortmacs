@@ -80,8 +80,151 @@ module files_fm
               delete_file, delete_directory, file_name_extension, auto_save_file_name_p, &
               file_size_human_readable, byte_count_to_string, get_free_disk_space, split_string_and_unquote, &
               shell_quote_wildcard_pattern, string_prefix_p
+    public :: copy_directory, file_in_directory_p, file_equal_p, make_empty_file, file_modes_symbolic_to_number, &
+              file_modes_number_to_symbolic, find_file_read_only, find_file_read_only_other_window
+
+    !> This option influences the handling of symbolic links in `copy_directory'.
+    !> If true, `copy_directory' will create a symbolic link if the
+    !> source directory is a symbolic link.  If false, it'll follow the
+    !> symbolic link and copy the contents instead.  Port of files.el
+    !> copy-directory-create-symlink.
+    logical, public :: copy_directory_create_symlink = .false.
+
+    !> True means buffers visiting files read-only do so in view mode.
+    !> In fact, this means that all read-only buffers normally have
+    !> View mode enabled, including buffers that are read-only because
+    !> you visit a file you cannot alter, and buffers you make read-only
+    !> using \[read_only_mode].  Port of files.el view-read-only (the
+    !> buffer-local values `read_only_mode' gives it are kept by view_fm).
+    logical, public :: view_read_only = .false.
 
     interface
+        !> Copy DIRECTORY to NEWNAME.  Both args must be strings.
+        !> This function always sets the file modes of the output files to match
+        !> the corresponding input file.
+        !>
+        !> KEEP_TIME true means give the output files the same
+        !> last-modified time as the old ones.  (This works on only some systems.)
+        !>
+        !> The PARENTS argument says whether to create
+        !> parent directories if they don't exist.
+        !>
+        !> If DIRECTORY is a symlink and `copy_directory_create_symlink' is
+        !> true, create a symlink with the same target as DIRECTORY.
+        !>
+        !> If NEWNAME is a directory name, copy DIRECTORY as a subdirectory
+        !> there.  However, if COPY_CONTENTS is true, copy the contents of
+        !> DIRECTORY directly into NEWNAME instead.  Port of
+        !> files.el:copy-directory (not interactive).  (In files_copy_fm.)
+        recursive module subroutine copy_directory(directory, newname, status, keep_time, parents, copy_contents)
+            implicit none(type, external)
+            character(len=*), intent(in) :: directory, newname
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: keep_time, parents, copy_contents
+        end subroutine copy_directory
+
+        !> Return true if DIR is a parent directory of FILE.
+        !> Value is true if FILE is inside DIR or inside a subdirectory of DIR.
+        !> A directory is considered to be a "parent" of itself.
+        !> DIR must be an existing directory, otherwise the function returns false.
+        !> Port of files.el:file-in-directory-p.  (In files_copy_fm.)
+        module function file_in_directory_p(file, dir) result(inside)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file, dir
+            logical :: inside
+        end function file_in_directory_p
+
+        !> Return true if files FILE1 and FILE2 name the same file.
+        !> If FILE1 or FILE2 does not exist, the return value is unspecified.
+        !> Port of files.el:file-equal-p (the attributes compared are those
+        !> `file_attributes' gives).  (In files_copy_fm.)
+        module function file_equal_p(file1, file2) result(same)
+            implicit none(type, external)
+            character(len=*), intent(in) :: file1, file2
+            logical :: same
+        end function file_equal_p
+
+        !> Create an empty file FILENAME.
+        !> Optional arg PARENTS, if true then creates parent dirs as needed.
+        !> Port of files.el:make-empty-file (not interactive).  (In
+        !> files_copy_fm.)
+        module subroutine make_empty_file(filename, status, parents)
+            implicit none(type, external)
+            character(len=*), intent(in) :: filename
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: parents
+        end subroutine make_empty_file
+
+        !> Convert symbolic file modes to numeric file modes.
+        !> MODES is the string to convert, it should match
+        !> "[ugoa]*([+=-][rwxXstugo]*)+,...".
+        !> See Info node `(coreutils)File permissions' for more information on this
+        !> notation.
+        !> FROM (or 0 if absent) gives the mode bits on which to base permissions if
+        !> MODES request to add, remove, or set permissions based on existing ones,
+        !> as in "og+rX-w".  NUM_MODES is the result.  Port of
+        !> files.el:file-modes-symbolic-to-number.  (In files_copy_fm.)
+        module subroutine file_modes_symbolic_to_number(modes, num_modes, status, from)
+            implicit none(type, external)
+            character(len=*), intent(in) :: modes
+            integer(int32), intent(out) :: num_modes
+            type(status_type), intent(out) :: status
+            integer(int32), intent(in), optional :: from
+        end subroutine file_modes_symbolic_to_number
+
+        !> Return a description of a file's MODE as a string of 10 letters and dashes.
+        !> The returned string is like the mode description produced by "ls -l".
+        !> For instance, if MODE is o'700', then it produces `-rwx------'.
+        !> Note that this is NOT the same as the "chmod" style symbolic description
+        !> accepted by `file_modes_symbolic_to_number'.
+        !> FILETYPE, if provided, should be a character denoting the type of file,
+        !> such as `d' for a directory, or `l' for a symbolic link, and will override
+        !> the leading `-' character.  Port of
+        !> files.el:file-modes-number-to-symbolic.  (In files_copy_fm.)
+        module function file_modes_number_to_symbolic(mode, filetype) result(s)
+            implicit none(type, external)
+            integer(int32), intent(in) :: mode
+            character, intent(in), optional :: filetype
+            character(len=10) :: s
+        end function file_modes_number_to_symbolic
+
+        !> Give fileio_fm's `rename_file' the files.el procedures it calls
+        !> across file systems.  (In files_copy_fm.)
+        module subroutine syms_of_files_copy()
+            implicit none(type, external)
+        end subroutine syms_of_files_copy
+
+        !> Edit file FILENAME but don't allow changes.
+        !> Like \[find_file], but marks buffer as read-only.
+        !> Use \[read_only_mode] to permit editing.  Port of
+        !> files.el:find-file-read-only (no wildcards).  (In files_read_fm.)
+        recursive module subroutine find_file_read_only(filename, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: filename
+            type(status_type), intent(out) :: status
+        end subroutine find_file_read_only
+
+        !> Edit file FILENAME in another window but don't allow changes.
+        !> Like \[find_file_other_window], but marks buffer as read-only.
+        !> Use \[read_only_mode] to permit editing.
+        !> If this command needs to split the current window, it by default obeys
+        !> the user options `split_height_threshold' and `split_width_threshold',
+        !> when it decides whether to split the window horizontally or vertically.
+        !> Port of files.el:find-file-read-only-other-window (no wildcards).
+        !> (In files_read_fm.)
+        recursive module subroutine find_file_read_only_other_window(filename, status)
+            implicit none(type, external)
+            character(len=*), intent(in) :: filename
+            type(status_type), intent(out) :: status
+        end subroutine find_file_read_only_other_window
+
+        !> Register `find_file_read_only' and its keys.  (In files_read_fm.)
+        module subroutine syms_of_files_read(ctl_x_map, ctl_x_4_map)
+            implicit none(type, external)
+            type(handle_type), intent(in) :: ctl_x_map
+            type(handle_type), intent(in), optional :: ctl_x_4_map
+        end subroutine syms_of_files_read
+
         !> minibuffer.el:read-file-name.  With `confirm_nonexistent', a
         !> name that is not an existing file needs confirming right after
         !> completion (confirm-nonexistent-file-or-buffer's value
@@ -846,9 +989,12 @@ contains
                     .not. file_writable_p(file_name_directory(file)) .or. &
                     .not. file_ownership_preserved_p(file, .true.)
         if (make_copy) then
-            call copy_file(file, backupname, status)
+            ! backup-buffer-copy
+            call copy_file(file, backupname, status, ok_if_already_exists=.true., keep_time=.true., &
+                           preserve_uid_gid=.true.)
+            if (status%ok() .and. modes >= 0) call set_file_modes(backupname, iand(modes, int(o'1777', int32)), status)
         else
-            call rename_file(file, backupname, status)
+            call rename_file(file, backupname, status, ok_if_already_exists=.true.)
             if (status%ok()) setmodes = modes
         end if
         ! A failed backup is ignored (condition-case file-error), and the
@@ -1507,6 +1653,8 @@ contains
         commands%find_file%run => cmd_find_file
         commands%find_file_other_window%run => cmd_find_file_other_window
         commands%revert_buffer%run => cmd_revert_buffer
+        call syms_of_files_copy()
+        call syms_of_files_read(ctl_x_map, ctl_x_4_map)
         if (present(ctl_x_4_map)) then
             ! files.el: (define-key ctl-x-4-map "f" 'find-file-other-window)
             key(1) = make_fixnum(int(iachar("f"), int64))

@@ -42,31 +42,42 @@ module docstrings_fm
     use dired_fm, only: completion_ignored_extensions
     use dired_mode_fm, only: dired_after_readin_hook, dired_always_read_filesystem, &
                              dired_auto_revert_buffer, dired_before_readin_hook, dired_broken_symlink, &
-                             dired_check_symlinks, dired_del_marker, dired_directory, dired_directory_face, dired_flagged, &
-                             dired_flagged_face, dired_free_space, DIRED_FREE_SPACE_NIL, DIRED_FREE_SPACE_SEPARATE, &
-                             DIRED_FREE_SPACE_FIRST, dired_garbage_files_regexp, dired_header, dired_header_face, &
-                             dired_ignored, dired_ignored_face, dired_initial_position_hook, dired_listing_switches, &
+                             dired_check_symlinks, dired_chown_program, dired_compress_directory_default_suffix, &
+                             dired_compress_file_alist, dired_compress_file_default_suffix, dired_compress_file_suffixes, &
+                             dired_compress_files_alist, dired_copy_dereference, dired_copy_preserve_time, &
+                             dired_create_destination_dirs, DIRED_CREATE_DESTINATION_DIRS_NIL, &
+                             DIRED_CREATE_DESTINATION_DIRS_ALWAYS, DIRED_CREATE_DESTINATION_DIRS_ASK, &
+                             dired_create_destination_dirs_on_trailing_dirsep, &
+                             dired_create_empty_file_in_current_directory, dired_del_marker, dired_directory, &
+                             dired_directory_face, dired_do_revert_buffer, dired_dwim_target, DIRED_DWIM_TARGET_NIL, &
+                             DIRED_DWIM_TARGET_NEXT, DIRED_DWIM_TARGET_NEXT_VISIBLE, DIRED_DWIM_TARGET_RECENT, &
+                             dired_flagged, dired_flagged_face, dired_free_space, DIRED_FREE_SPACE_NIL, &
+                             DIRED_FREE_SPACE_SEPARATE, DIRED_FREE_SPACE_FIRST, dired_garbage_files_regexp, dired_header, &
+                             dired_header_face, dired_ignored, dired_ignored_face, dired_initial_position_hook, &
+                             dired_keep_marker_copy, dired_keep_marker_hardlink, dired_keep_marker_relsymlink, &
+                             dired_keep_marker_rename, dired_keep_marker_symlink, dired_listing_switches, &
                              dired_ls_f_marks_symlinks, dired_mark, dired_mark_face, dired_mark_region, &
                              DIRED_MARK_REGION_NIL, DIRED_MARK_REGION_FILE, DIRED_MARK_REGION_LINE, dired_marked, &
                              dired_marked_face, dired_marker_char, dired_mode_hook, dired_mode_map, dired_movement_style, &
                              DIRED_MOVEMENT_STYLE_NIL, DIRED_MOVEMENT_STYLE_CYCLE, DIRED_MOVEMENT_STYLE_BOUNDED, &
                              DIRED_MOVEMENT_STYLE_CYCLE_FILES, DIRED_MOVEMENT_STYLE_BOUNDED_FILES, dired_no_confirm, &
-                             dired_perm_write, dired_perm_write_face, dired_recursive_deletes, DIRED_RECURSIVE_NEVER, &
-                             DIRED_RECURSIVE_ALWAYS, DIRED_RECURSIVE_TOP, DIRED_RECURSIVE_ASK, dired_set_id, &
-                             dired_sort_inhibit, dired_special, dired_switches_in_mode_line, DIRED_SWITCHES_SORT_ORDER, &
-                             DIRED_SWITCHES_AS_IS, dired_symlink, dired_symlink_face, dired_trivial_filenames, &
-                             dired_use_ls_dired, DIRED_USE_LS_DIRED_NIL, DIRED_USE_LS_DIRED_T, &
-                             DIRED_USE_LS_DIRED_UNSPECIFIED, dired_warning, dired_warning_face
+                             dired_perm_write, dired_perm_write_face, dired_recursive_copies, DIRED_RECURSIVE_NEVER, &
+                             DIRED_RECURSIVE_ALWAYS, DIRED_RECURSIVE_TOP, DIRED_RECURSIVE_ASK, dired_recursive_deletes, &
+                             DIRED_RECURSIVE_NEVER, DIRED_RECURSIVE_ALWAYS, DIRED_RECURSIVE_TOP, DIRED_RECURSIVE_ASK, &
+                             dired_set_id, dired_sort_inhibit, dired_special, dired_switches_in_mode_line, &
+                             DIRED_SWITCHES_SORT_ORDER, DIRED_SWITCHES_AS_IS, dired_symlink, dired_symlink_face, &
+                             dired_touch_program, dired_trivial_filenames, dired_use_ls_dired, DIRED_USE_LS_DIRED_NIL, &
+                             DIRED_USE_LS_DIRED_T, DIRED_USE_LS_DIRED_UNSPECIFIED, dired_warning, dired_warning_face
     use editfns_fm, only: inhibit_field_text_motion
     use edmacro_fm, only: edmacro_eight_bits
     use eval_fm, only: change_major_mode_hook
-    use files_fm, only: change_major_mode_with_file_name, directory_listing_before_filename_regexp, &
-                        dired_ls_error_buffer, dired_ls_error_file, find_file_run_dired, insert_directory_program, &
-                        make_backup_files, mode_require_final_newline, FINAL_NEWLINE_NEVER, FINAL_NEWLINE_SAVE, &
-                        FINAL_NEWLINE_VISIT, FINAL_NEWLINE_VISIT_SAVE, FINAL_NEWLINE_ASK, require_final_newline, &
+    use files_fm, only: change_major_mode_with_file_name, copy_directory_create_symlink, &
+                        directory_listing_before_filename_regexp, dired_ls_error_buffer, dired_ls_error_file, &
+                        find_file_run_dired, insert_directory_program, make_backup_files, mode_require_final_newline, &
                         FINAL_NEWLINE_NEVER, FINAL_NEWLINE_SAVE, FINAL_NEWLINE_VISIT, FINAL_NEWLINE_VISIT_SAVE, &
-                        FINAL_NEWLINE_ASK, revert_buffer_function, revert_buffer_in_progress, &
-                        revert_buffer_preserve_modes
+                        FINAL_NEWLINE_ASK, require_final_newline, FINAL_NEWLINE_NEVER, FINAL_NEWLINE_SAVE, &
+                        FINAL_NEWLINE_VISIT, FINAL_NEWLINE_VISIT_SAVE, FINAL_NEWLINE_ASK, revert_buffer_function, &
+                        revert_buffer_in_progress, revert_buffer_preserve_modes, view_read_only
     use fill_fm, only: adaptive_fill_first_line_regexp, adaptive_fill_mode, adaptive_fill_regexp, &
                        colon_double_space, default_justification, JUSTIFY_NONE, JUSTIFY_LEFT, JUSTIFY_RIGHT, &
                        JUSTIFY_FULL, JUSTIFY_CENTER, JUSTIFY_T, fill_indent_according_to_mode, &
@@ -123,11 +134,11 @@ module docstrings_fm
                          cycle_spacing_actions, delete_active_region, fill_prefix, goal_column, indent_tabs_mode_hook, &
                          inhibit_auto_fill, kill_read_only_ok, kill_ring_max, kill_ring_yank_pointer, &
                          kill_whole_line_option, line_move_visual, mark_ring_max, minibuffer_local_shell_command_map, &
-                         pending_undo_list, read_quoted_char_radix, shell_command_default_error_buffer, &
-                         shell_command_dont_erase_buffer, DONT_ERASE_NIL, DONT_ERASE_ERASE, DONT_ERASE_BEG_LAST_OUT, &
-                         DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT, shell_command_prompt_show_cwd, &
-                         shell_command_switch, special_mode_hook, special_mode_map, suggest_key_bindings, &
-                         transient_mark_mode_hook, undo_in_progress, undo_no_redo
+                         pending_undo_list, read_only_mode_hook, read_quoted_char_radix, &
+                         shell_command_default_error_buffer, shell_command_dont_erase_buffer, DONT_ERASE_NIL, &
+                         DONT_ERASE_ERASE, DONT_ERASE_BEG_LAST_OUT, DONT_ERASE_END_LAST_OUT, DONT_ERASE_SAVE_POINT, &
+                         shell_command_prompt_show_cwd, shell_command_switch, special_mode_hook, special_mode_map, &
+                         suggest_key_bindings, transient_mark_mode_hook, undo_in_progress, undo_no_redo
     use subr_fm, only: after_change_major_mode_hook, change_major_mode_after_body_hook, &
                        history_delete_duplicates, history_length, y_or_n_p_history_variable, y_or_n_p_use_read_key
     use syntax_fm, only: comment_end_can_be_escaped, comment_use_syntax_ppss, &
@@ -136,6 +147,8 @@ module docstrings_fm
     use term_fm, only: visible_bell
     use text_mode_fm, only: text_mode_hook, text_mode_map, text_mode_syntax_table, text_mode_variant
     use undo_fm, only: amalgamating_undo_limit, this_command_amalgamating
+    use view_fm, only: view_exits_all_viewing_windows, view_inhibit_help_message, view_mode_hook, &
+                       view_mode_map, view_no_disable_on_exit, view_scroll_auto_exit
     use window_fm, only: display_buffer_mark_dedicated, DEDICATED_NONE, DEDICATED_WEAK, &
                          DEDICATED_STRONG, even_window_sizes, minibuffer_scroll_window, next_screen_context_lines, &
                          pop_up_windows, scroll_error_top_bottom, split_height_threshold, split_width_threshold, &
@@ -164,11 +177,12 @@ module docstrings_fm
     end type doc_entry_type
 
     !> The documented functions, sorted.
-    character(len=38), parameter, public :: function_names(492) = [character(len=38) :: &
+    character(len=39), parameter, public :: function_names(559) = [character(len=39) :: &
                                                                    "abort_minibuffers", &
                                                                    "abort_recursive_edit", &
                                                                    "accept_process_output", &
                                                                    "add_auto_mode", &
+                                                                   "add_name_to_file", &
                                                                    "append_to_register", &
                                                                    "apply_on_rectangle", &
                                                                    "auto_fill_mode", &
@@ -203,6 +217,8 @@ module docstrings_fm
                                                                    "compilation_mode", &
                                                                    "compilation_start", &
                                                                    "compile", &
+                                                                   "copy_directory", &
+                                                                   "copy_file", &
                                                                    "copy_rectangle_as_kill", &
                                                                    "copy_rectangle_to_register", &
                                                                    "copy_region_as_kill", &
@@ -243,10 +259,29 @@ module docstrings_fm
                                                                    "dired_change_marks", &
                                                                    "dired_copy_filename_as_kill", &
                                                                    "dired_create_directory", &
+                                                                   "dired_create_empty_file", &
                                                                    "dired_display_file", &
+                                                                   "dired_do_chgrp", &
+                                                                   "dired_do_chmod", &
+                                                                   "dired_do_chown", &
+                                                                   "dired_do_compress", &
+                                                                   "dired_do_compress_to", &
+                                                                   "dired_do_copy", &
+                                                                   "dired_do_copy_regexp", &
                                                                    "dired_do_delete", &
                                                                    "dired_do_flagged_delete", &
+                                                                   "dired_do_hardlink", &
+                                                                   "dired_do_hardlink_regexp", &
+                                                                   "dired_do_kill_lines", &
                                                                    "dired_do_redisplay", &
+                                                                   "dired_do_relsymlink", &
+                                                                   "dired_do_relsymlink_regexp", &
+                                                                   "dired_do_rename", &
+                                                                   "dired_do_rename_regexp", &
+                                                                   "dired_do_symlink", &
+                                                                   "dired_do_symlink_regexp", &
+                                                                   "dired_do_touch", &
+                                                                   "dired_downcase", &
                                                                    "dired_find_file", &
                                                                    "dired_find_file_other_window", &
                                                                    "dired_flag_auto_save_files", &
@@ -255,6 +290,7 @@ module docstrings_fm
                                                                    "dired_flag_files_regexp", &
                                                                    "dired_flag_garbage_files", &
                                                                    "dired_goto_file", &
+                                                                   "dired_kill_line", &
                                                                    "dired_kill_subdir", &
                                                                    "dired_mark", &
                                                                    "dired_mark_directories", &
@@ -275,6 +311,7 @@ module docstrings_fm
                                                                    "dired_prev_marked_file", &
                                                                    "dired_prev_subdir", &
                                                                    "dired_previous_line", &
+                                                                   "dired_show_file_type", &
                                                                    "dired_sort_toggle_or_edit", &
                                                                    "dired_summary", &
                                                                    "dired_toggle_marks", &
@@ -284,6 +321,8 @@ module docstrings_fm
                                                                    "dired_unmark_all_marks", &
                                                                    "dired_unmark_backward", &
                                                                    "dired_up_directory", &
+                                                                   "dired_upcase", &
+                                                                   "dired_view_file", &
                                                                    "dired_why", &
                                                                    "disable_command", &
                                                                    "display_message_or_buffer", &
@@ -303,6 +342,8 @@ module docstrings_fm
                                                                    "exit_minibuffer", &
                                                                    "extract_rectangle", &
                                                                    "extract_rectangle_bounds", &
+                                                                   "file_modes_number_to_symbolic", &
+                                                                   "file_modes_symbolic_to_number", &
                                                                    "file_name_sans_versions", &
                                                                    "file_to_register", &
                                                                    "fill_french_nobreak_p", &
@@ -315,6 +356,8 @@ module docstrings_fm
                                                                    "fill_single_word_nobreak_p", &
                                                                    "find_file", &
                                                                    "find_file_other_window", &
+                                                                   "find_file_read_only", &
+                                                                   "find_file_read_only_other_window", &
                                                                    "fixup_whitespace", &
                                                                    "font_lock_add_keywords", &
                                                                    "font_lock_anchored", &
@@ -348,6 +391,7 @@ module docstrings_fm
                                                                    "global_font_lock_mode_enable_in_buffer", &
                                                                    "global_set_key", &
                                                                    "goto_char", &
+                                                                   "help_form_show", &
                                                                    "help_mode", &
                                                                    "help_quit", &
                                                                    "increment_register", &
@@ -455,7 +499,9 @@ module docstrings_fm
                                                                    "looking_at_p", &
                                                                    "looking_back", &
                                                                    "major_mode_named", &
+                                                                   "make_empty_file", &
                                                                    "make_process", &
+                                                                   "make_symbolic_link", &
                                                                    "make_syntax_table", &
                                                                    "map_query_replace_regexp", &
                                                                    "mark", &
@@ -540,9 +586,12 @@ module docstrings_fm
                                                                    "re_search_backward", &
                                                                    "re_search_forward", &
                                                                    "read_buffer", &
+                                                                   "read_char_from_minibuffer_insert_char", &
+                                                                   "read_char_from_minibuffer_insert_other", &
                                                                    "read_file_name_default", &
                                                                    "read_multiple_choice", &
                                                                    "read_number", &
+                                                                   "read_only_mode", &
                                                                    "read_shell_command", &
                                                                    "read_string", &
                                                                    "recenter", &
@@ -557,6 +606,7 @@ module docstrings_fm
                                                                    "region_beginning", &
                                                                    "region_end", &
                                                                    "register_read_with_preview", &
+                                                                   "rename_file", &
                                                                    "replace_match", &
                                                                    "replace_regexp", &
                                                                    "replace_string", &
@@ -586,6 +636,8 @@ module docstrings_fm
                                                                    "set_buffer", &
                                                                    "set_command_disabled", &
                                                                    "set_error", &
+                                                                   "set_file_modes", &
+                                                                   "set_file_times", &
                                                                    "set_fill_column", &
                                                                    "set_fill_prefix", &
                                                                    "set_mark", &
@@ -645,7 +697,35 @@ module docstrings_fm
                                                                    "upcase_initials_region", &
                                                                    "upcase_region", &
                                                                    "upcase_word", &
+                                                                   "view_back_to_mark", &
+                                                                   "view_buffer", &
+                                                                   "view_buffer_other_window", &
+                                                                   "view_exit", &
+                                                                   "view_exit_and_edit", &
+                                                                   "view_file", &
+                                                                   "view_file_other_window", &
+                                                                   "view_goto_line", &
+                                                                   "view_goto_percent", &
+                                                                   "view_kill_and_leave", &
+                                                                   "view_leave", &
+                                                                   "view_mode", &
+                                                                   "view_quit", &
+                                                                   "view_quit_all", &
                                                                    "view_register", &
+                                                                   "view_scroll_half_page_backward", &
+                                                                   "view_scroll_half_page_forward", &
+                                                                   "view_scroll_line_backward", &
+                                                                   "view_scroll_line_forward", &
+                                                                   "view_scroll_page_backward", &
+                                                                   "view_scroll_page_backward_set_page_size", &
+                                                                   "view_scroll_page_forward", &
+                                                                   "view_scroll_page_forward_set_page_size", &
+                                                                   "view_scroll_to_buffer_end", &
+                                                                   "view_search_last_regexp_backward", &
+                                                                   "view_search_last_regexp_forward", &
+                                                                   "view_search_regexp_backward", &
+                                                                   "view_search_regexp_forward", &
+                                                                   "what_line", &
                                                                    "where_is", &
                                                                    "window_configuration_to_register", &
                                                                    "write_file", &
@@ -659,7 +739,7 @@ module docstrings_fm
                                                                    "yes_or_no_p"]
 
     !> The documented variables, sorted.
-    character(len=44), parameter, public :: variable_names(246) = [character(len=44) :: &
+    character(len=48), parameter, public :: variable_names(275) = [character(len=48) :: &
                                                                    "adaptive_fill_first_line_regexp", &
                                                                    "adaptive_fill_mode", &
                                                                    "adaptive_fill_regexp", &
@@ -699,6 +779,7 @@ module docstrings_fm
                                                                    "completion_ignored_extensions", &
                                                                    "completion_show_inline_help", &
                                                                    "completions_max_height", &
+                                                                   "copy_directory_create_symlink", &
                                                                    "copy_region_blink_delay", &
                                                                    "current_prefix_arg", &
                                                                    "cycle_spacing_actions", &
@@ -715,9 +796,22 @@ module docstrings_fm
                                                                    "dired_before_readin_hook", &
                                                                    "dired_broken_symlink", &
                                                                    "dired_check_symlinks", &
+                                                                   "dired_chown_program", &
+                                                                   "dired_compress_directory_default_suffix", &
+                                                                   "dired_compress_file_alist", &
+                                                                   "dired_compress_file_default_suffix", &
+                                                                   "dired_compress_file_suffixes", &
+                                                                   "dired_compress_files_alist", &
+                                                                   "dired_copy_dereference", &
+                                                                   "dired_copy_preserve_time", &
+                                                                   "dired_create_destination_dirs", &
+                                                                   "dired_create_destination_dirs_on_trailing_dirsep", &
+                                                                   "dired_create_empty_file_in_current_directory", &
                                                                    "dired_del_marker", &
                                                                    "dired_directory", &
                                                                    "dired_directory_face", &
+                                                                   "dired_do_revert_buffer", &
+                                                                   "dired_dwim_target", &
                                                                    "dired_flagged", &
                                                                    "dired_flagged_face", &
                                                                    "dired_free_space", &
@@ -727,6 +821,11 @@ module docstrings_fm
                                                                    "dired_ignored", &
                                                                    "dired_ignored_face", &
                                                                    "dired_initial_position_hook", &
+                                                                   "dired_keep_marker_copy", &
+                                                                   "dired_keep_marker_hardlink", &
+                                                                   "dired_keep_marker_relsymlink", &
+                                                                   "dired_keep_marker_rename", &
+                                                                   "dired_keep_marker_symlink", &
                                                                    "dired_listing_switches", &
                                                                    "dired_ls_f_marks_symlinks", &
                                                                    "dired_mark", &
@@ -741,6 +840,7 @@ module docstrings_fm
                                                                    "dired_no_confirm", &
                                                                    "dired_perm_write", &
                                                                    "dired_perm_write_face", &
+                                                                   "dired_recursive_copies", &
                                                                    "dired_recursive_deletes", &
                                                                    "dired_set_id", &
                                                                    "dired_sort_inhibit", &
@@ -748,6 +848,7 @@ module docstrings_fm
                                                                    "dired_switches_in_mode_line", &
                                                                    "dired_symlink", &
                                                                    "dired_symlink_face", &
+                                                                   "dired_touch_program", &
                                                                    "dired_trivial_filenames", &
                                                                    "dired_use_ls_dired", &
                                                                    "dired_warning", &
@@ -849,6 +950,7 @@ module docstrings_fm
                                                                    "read_char_choice_use_read_key", &
                                                                    "read_file_name_completion_ignore_case", &
                                                                    "read_minibuffer_restore_windows", &
+                                                                   "read_only_mode_hook", &
                                                                    "read_quoted_char_radix", &
                                                                    "regexp_search_ring_max", &
                                                                    "register_alist", &
@@ -899,6 +1001,13 @@ module docstrings_fm
                                                                    "undo_no_redo", &
                                                                    "use_short_answers", &
                                                                    "user_init_file", &
+                                                                   "view_exits_all_viewing_windows", &
+                                                                   "view_inhibit_help_message", &
+                                                                   "view_mode_hook", &
+                                                                   "view_mode_map", &
+                                                                   "view_no_disable_on_exit", &
+                                                                   "view_read_only", &
+                                                                   "view_scroll_auto_exit", &
                                                                    "visible_bell", &
                                                                    "window_min_height", &
                                                                    "window_min_width", &
@@ -955,6 +1064,15 @@ contains
             entry%doc = "Add REGEXP and MODE to the front of `auto_mode_alist', so files"//LF// &
                         "whose names match REGEXP get major mode MODE.  (In"//LF// &
                         "files_mode_fm.)"
+        case ("add_name_to_file")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call add_name_to_file(file, newname, status, ok_if_already_exists)"
+            entry%doc = "Give FILE additional name NEWNAME.  Both args must be strings."//LF// &
+                        "If NEWNAME is a directory name, give FILE a like-named new name under"//LF// &
+                        "NEWNAME."//LF// &
+                        ""//LF// &
+                        "Signal a `file_already_exists' error if a file NEWNAME already exists"//LF// &
+                        "unless optional third argument OK_IF_ALREADY_EXISTS is true."
         case ("append_to_register")
             entry%file = "register_fm.f90"
             entry%fortran = "call append_to_register(register, start, end, status, delete_flag)"
@@ -1277,6 +1395,53 @@ contains
                         ""//LF// &
                         "Compile the program including the current buffer.  Default: run"//LF// &
                         "`make'."
+        case ("copy_directory")
+            entry%file = "files_fm.f90"
+            entry%fortran = "call copy_directory(directory, newname, status, keep_time, parents, copy_contents)"
+            entry%doc = "Copy DIRECTORY to NEWNAME.  Both args must be strings."//LF// &
+                        "This function always sets the file modes of the output files to match"//LF// &
+                        "the corresponding input file."//LF// &
+                        ""//LF// &
+                        "KEEP_TIME true means give the output files the same"//LF// &
+                        "last-modified time as the old ones.  (This works on only some systems.)"//LF// &
+                        ""//LF// &
+                        "The PARENTS argument says whether to create"//LF// &
+                        "parent directories if they don't exist."//LF// &
+                        ""//LF// &
+                        "If DIRECTORY is a symlink and `copy_directory_create_symlink' is"//LF// &
+                        "true, create a symlink with the same target as DIRECTORY."//LF// &
+                        ""//LF// &
+                        "If NEWNAME is a directory name, copy DIRECTORY as a subdirectory"//LF// &
+                        "there.  However, if COPY_CONTENTS is true, copy the contents of"//LF// &
+                        "DIRECTORY directly into NEWNAME instead."
+        case ("copy_file")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call copy_file(file, newname, status, ok_if_already_exists, keep_time, preserve_uid_gid, p"// &
+                            "reserve_permissions)"
+            entry%doc = "Copy FILE to NEWNAME.  Both args must be strings."//LF// &
+                        "If NEWNAME is a directory name, copy FILE to a like-named file under"//LF// &
+                        "NEWNAME.  For NEWNAME to be recognized as a directory name, it should"//LF// &
+                        "end in a slash."//LF// &
+                        ""//LF// &
+                        "This function always sets the file modes of the output file to match"//LF// &
+                        "the input file."//LF// &
+                        ""//LF// &
+                        "The optional argument OK_IF_ALREADY_EXISTS specifies what to do"//LF// &
+                        "if file NEWNAME already exists.  If OK_IF_ALREADY_EXISTS is false,"//LF// &
+                        "signal a `file_already_exists' error without overwriting."//LF// &
+                        "Otherwise overwrite the existing file."//LF// &
+                        ""//LF// &
+                        "KEEP_TIME true means give the output file the same"//LF// &
+                        "last-modified time as the old one.  (This works on only some systems.)"//LF// &
+                        ""//LF// &
+                        "If PRESERVE_UID_GID is true, try to transfer the uid and gid of"//LF// &
+                        "FILE to NEWNAME."//LF// &
+                        ""//LF// &
+                        "If PRESERVE_PERMISSIONS is true, copy permissions of FILE to NEWNAME;"//LF// &
+                        "this includes the file modes, along with ACL entries and SELinux"//LF// &
+                        "context if present.  Otherwise, if NEWNAME is created its file"//LF// &
+                        "permission bits are those of FILE, masked by the default file"//LF// &
+                        "permissions."
         case ("copy_rectangle_as_kill")
             entry%file = "rect_fm.f90"
             entry%fortran = "call copy_rectangle_as_kill(start, end, status)"
@@ -1608,10 +1773,101 @@ contains
             entry%doc = "Create a directory called DIRECTORY."//LF// &
                         "Parent directories of DIRECTORY are created as needed."//LF// &
                         "If DIRECTORY already exists, signal an error."
+        case ("dired_create_empty_file")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Create an empty file called FILE."//LF// &
+                        "Parent directories of FILE are created as needed."//LF// &
+                        "Add an entry in the Dired buffer for the topmost new parent"//LF// &
+                        "directory of FILE, if created, otherwise for the new file."//LF// &
+                        "If user option `dired_create_empty_file_in_current_directory' is"//LF// &
+                        "true, act on the current subdirectory by default, otherwise act on"//LF// &
+                        "the default directory by default."//LF// &
+                        "If FILE already exists, signal an error."
         case ("dired_display_file")
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
             entry%doc = "In Dired, display this file or directory in another window."
+        case ("dired_do_chgrp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Change the group of the marked (or next ARG) files."//LF// &
+                        "After invoking the command, type"//LF// &
+                        "\<minibuffer_local_completion_map>\[next_history_element] to pull"//LF// &
+                        "the file attributes of the file at point into the minibuffer."
+        case ("dired_do_chmod")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Change the mode of the marked (or next ARG) files."//LF// &
+                        "Both octal numeric modes like `644' and symbolic modes like `g+w'"//LF// &
+                        "are supported."//LF// &
+                        "After invoking the command, type"//LF// &
+                        "\<minibuffer_local_completion_map>\[next_history_element] to pull"//LF// &
+                        "the file attributes of the file at point into the minibuffer."//LF// &
+                        ""//LF// &
+                        "See Info node `(coreutils)File permissions' for more information."//LF// &
+                        "Alternatively, see the man page for ""chmod(1)""."
+        case ("dired_do_chown")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Change the owner of the marked (or next ARG) files."//LF// &
+                        "After invoking the command, type"//LF// &
+                        "\<minibuffer_local_completion_map>\[next_history_element] to pull"//LF// &
+                        "the file attributes of the file at point into the minibuffer."
+        case ("dired_do_compress")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Compress or uncompress marked (or next ARG) files."//LF// &
+                        "If invoked on a directory, compress all of the files in"//LF// &
+                        "the directory and all of its subdirectories, recursively,"//LF// &
+                        "into a .tar.gz archive."//LF// &
+                        "If invoked on a .tar.gz or a .tgz or a .zip or a .7z archive,"//LF// &
+                        "uncompress and unpack all the files in the archive."
+        case ("dired_do_compress_to")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Compress selected files and directories to an archive."//LF// &
+                        "Prompt for the archive file name."//LF// &
+                        "Choose the archiving command based on the archive file-name extension"//LF// &
+                        "and `dired_compress_files_alist'."
+        case ("dired_do_copy")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Copy all marked (or next ARG) files, or copy the current file."//LF// &
+                        "ARG has to be numeric for above functionality.  See"//LF// &
+                        "`dired_get_marked_files' for more details."//LF// &
+                        ""//LF// &
+                        "When operating on just the current file, prompt for the new name."//LF// &
+                        ""//LF// &
+                        "When operating on multiple or marked files, prompt for a target"//LF// &
+                        "directory, and make the new copies in that directory, with the"//LF// &
+                        "same names as the original files.  The initial suggestion for the"//LF// &
+                        "target directory is the Dired buffer's current directory (or, if"//LF// &
+                        "`dired_dwim_target' is set, the current directory of a"//LF// &
+                        "neighboring Dired window)."//LF// &
+                        ""//LF// &
+                        "If `dired_copy_preserve_time' is true, this command preserves"//LF// &
+                        "the modification time of each old file in the copy, similar to"//LF// &
+                        "the ""-p"" option for the ""cp"" shell command."//LF// &
+                        ""//LF// &
+                        "The `dired_keep_marker_copy' user option controls how this"//LF// &
+                        "command handles file marking.  The default is to mark all new"//LF// &
+                        "copies of files with a ""C"" mark."//LF// &
+                        ""//LF// &
+                        "This command copies symbolic links by creating new ones,"//LF// &
+                        "similar to the ""-d"" option for the ""cp"" shell command."//LF// &
+                        "But if `dired_copy_dereference' is true, the symbolic"//LF// &
+                        "links are dereferenced and then copied, similar to the ""-L"""//LF// &
+                        "option for the ""cp"" shell command.  If ARG is"//LF// &
+                        "\[universal_argument] alone, the inverted value of"//LF// &
+                        "`dired_copy_dereference' will be used."//LF// &
+                        ""//LF// &
+                        "Also see `dired_do_revert_buffer'."
+        case ("dired_do_copy_regexp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Copy selected files whose names match REGEXP to NEWNAME."//LF// &
+                        "See function `dired_do_rename_regexp' for more info."
         case ("dired_do_delete")
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
@@ -1624,6 +1880,41 @@ contains
             entry%doc = "In Dired, delete the files flagged for deletion."//LF// &
                         "`dired_recursive_deletes' controls whether deletion of"//LF// &
                         "non-empty directories is allowed."
+        case ("dired_do_hardlink")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Add names (hard links) current file or all marked (or next ARG) files."//LF// &
+                        "When operating on just the current file, you specify the new name."//LF// &
+                        "When operating on multiple or marked files, you specify a directory"//LF// &
+                        "and new hard links are made in that directory"//LF// &
+                        "with the same names that the files currently have.  The default"//LF// &
+                        "suggested for the target directory depends on the value of"//LF// &
+                        "`dired_dwim_target', which see."//LF// &
+                        ""//LF// &
+                        "Also see `dired_do_revert_buffer'."
+        case ("dired_do_hardlink_regexp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Hardlink selected files whose names match REGEXP to NEWNAME."//LF// &
+                        "See function `dired_do_rename_regexp' for more info."
+        case ("dired_do_kill_lines")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Remove all marked lines, or the next ARG lines."//LF// &
+                        "The files or directories on those lines are _not_ deleted.  Only the"//LF// &
+                        "Dired listing is affected.  To restore the removals, use \[revert_buffer]."//LF// &
+                        ""//LF// &
+                        "With a numeric prefix arg, remove that many lines going forward,"//LF// &
+                        "starting with the current line.  (A negative prefix arg removes lines"//LF// &
+                        "going backward.)"//LF// &
+                        ""//LF// &
+                        "If you use a prefix arg to remove the line for a subdir whose listing"//LF// &
+                        "you have inserted into the Dired buffer, then that subdir listing is"//LF// &
+                        "also removed."//LF// &
+                        ""//LF// &
+                        "To remove a subdir listing _without_ removing the subdir's line in its"//LF// &
+                        "parent listing, go to the header line of the subdir listing and use"//LF// &
+                        "this command with any prefix arg."
         case ("dired_do_redisplay")
             entry%file = "dired_aux_fm.f90"
             entry%interactive = .true.
@@ -1635,6 +1926,84 @@ contains
                         "the buffer will not reset them.  However, using `dired_undo' to re-insert"//LF// &
                         "or delete subdirectories can bypass this machinery.  Hence, you sometimes"//LF// &
                         "may have to reset some subdirectory switches after a `dired_undo'."
+        case ("dired_do_relsymlink")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Relative symlink all marked (or next ARG) files into a directory."//LF// &
+                        "Otherwise make a relative symbolic link to the current file."//LF// &
+                        "This creates relative symbolic links like"//LF// &
+                        ""//LF// &
+                        "    foo -> ../bar/foo"//LF// &
+                        ""//LF// &
+                        "not absolute ones like"//LF// &
+                        ""//LF// &
+                        "    foo -> /ugly/file/name/that/may/change/any/day/bar/foo"//LF// &
+                        ""//LF// &
+                        "For absolute symlinks, use \[dired_do_symlink]."
+        case ("dired_do_relsymlink_regexp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "RelSymlink all marked files containing REGEXP to NEWNAME."//LF// &
+                        "See functions `dired_do_rename_regexp' and `dired_do_relsymlink'"//LF// &
+                        "for more info."
+        case ("dired_do_rename")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Rename current file or all marked (or next ARG) files."//LF// &
+                        "When renaming just the current file, you specify the new name."//LF// &
+                        "When renaming multiple or marked files, you specify a directory."//LF// &
+                        "This command also renames any buffers that are visiting the files."//LF// &
+                        "The default suggested for the target directory depends on the value"//LF// &
+                        "of `dired_dwim_target', which see."//LF// &
+                        ""//LF// &
+                        "Also see `dired_do_revert_buffer'."
+        case ("dired_do_rename_regexp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Rename selected files whose names match REGEXP to NEWNAME."//LF// &
+                        ""//LF// &
+                        "With non-zero prefix argument ARG, the command operates on the next ARG"//LF// &
+                        "files.  Otherwise, it operates on all the marked files, or the current"//LF// &
+                        "file if none are marked."//LF// &
+                        ""//LF// &
+                        "As each match is found, the user must type a character saying"//LF// &
+                        "  what to do with it.  For directions, type \[help_command] at that time."//LF// &
+                        "NEWNAME may contain \<n> or \& as in `query_replace_regexp'."//LF// &
+                        "REGEXP defaults to the last regexp used."//LF// &
+                        ""//LF// &
+                        "With a zero prefix arg, renaming by regexp affects the absolute file name."//LF// &
+                        "Normally, only the non-directory part of the file name is used and changed."
+        case ("dired_do_symlink")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Make symbolic links to current file or all marked (or next ARG) files."//LF// &
+                        "When operating on just the current file, you specify the new name."//LF// &
+                        "When operating on multiple or marked files, you specify a directory"//LF// &
+                        "and new symbolic links are made in that directory"//LF// &
+                        "with the same names that the files currently have.  The default"//LF// &
+                        "suggested for the target directory depends on the value of"//LF// &
+                        "`dired_dwim_target', which see."//LF// &
+                        ""//LF// &
+                        "For relative symlinks, use \[dired_do_relsymlink]."//LF// &
+                        ""//LF// &
+                        "Also see `dired_do_revert_buffer'."
+        case ("dired_do_symlink_regexp")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Symlink selected files whose names match REGEXP to NEWNAME."//LF// &
+                        "See function `dired_do_rename_regexp' for more info."
+        case ("dired_do_touch")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Change the timestamp of the marked (or next ARG) files."//LF// &
+                        "This calls touch."//LF// &
+                        "After invoking the command, type"//LF// &
+                        "\<minibuffer_local_completion_map>\[next_history_element] to pull"//LF// &
+                        "the file attributes of the file at point into the minibuffer."
+        case ("dired_downcase")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Rename all marked (or next ARG) files to lower case."
         case ("dired_find_file")
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
@@ -1685,6 +2054,12 @@ contains
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
             entry%doc = "Go to line describing file FILE in this Dired buffer."
+        case ("dired_kill_line")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Kill the current line (not the files)."//LF// &
+                        "With a prefix argument, kill that many lines starting with the current line."//LF// &
+                        "(A negative argument kills backward.)"
         case ("dired_kill_subdir")
             entry%file = "dired_aux_fm.f90"
             entry%interactive = .true.
@@ -1825,6 +2200,13 @@ contains
                         ""//LF// &
                         "Whether to skip empty lines and how to move from first line"//LF// &
                         "is controlled by `dired_movement_style'."
+        case ("dired_show_file_type")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Print the type of FILE, according to the `file' command."//LF// &
+                        "If you give a prefix to this command, and FILE is a symbolic"//LF// &
+                        "link, then the command will print the type of the target of the link"//LF// &
+                        "instead."
         case ("dired_sort_toggle_or_edit")
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
@@ -1890,6 +2272,16 @@ contains
                         "Creates a buffer if necessary."//LF// &
                         "If OTHER-WINDOW (the optional prefix arg), display the parent"//LF// &
                         "directory in another window."
+        case ("dired_upcase")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Rename all marked (or next ARG) files to upper case."
+        case ("dired_view_file")
+            entry%file = "dired_aux_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "In Dired, examine a file in view mode, returning to Dired when done."//LF// &
+                        "When file is a directory, show it in this buffer if it is inserted."//LF// &
+                        "Otherwise, display it in another buffer."
         case ("dired_why")
             entry%file = "dired_mode_fm.f90"
             entry%interactive = .true.
@@ -2033,6 +2425,28 @@ contains
             entry%doc = "Return the bounds of the rectangle with corners at START and END."//LF// &
                         "Return it as STARTS and ENDS, the start and end positions of each"//LF// &
                         "line of the rectangle."
+        case ("file_modes_number_to_symbolic")
+            entry%file = "files_fm.f90"
+            entry%fortran = "file_modes_number_to_symbolic(mode, filetype)"
+            entry%doc = "Return a description of a file's MODE as a string of 10 letters and dashes."//LF// &
+                        "The returned string is like the mode description produced by ""ls -l""."//LF// &
+                        "For instance, if MODE is o'700', then it produces `-rwx------'."//LF// &
+                        "Note that this is NOT the same as the ""chmod"" style symbolic description"//LF// &
+                        "accepted by `file_modes_symbolic_to_number'."//LF// &
+                        "FILETYPE, if provided, should be a character denoting the type of file,"//LF// &
+                        "such as `d' for a directory, or `l' for a symbolic link, and will override"//LF// &
+                        "the leading `-' character."
+        case ("file_modes_symbolic_to_number")
+            entry%file = "files_fm.f90"
+            entry%fortran = "call file_modes_symbolic_to_number(modes, num_modes, status, from)"
+            entry%doc = "Convert symbolic file modes to numeric file modes."//LF// &
+                        "MODES is the string to convert, it should match"//LF// &
+                        """[ugoa]*([+=-][rwxXstugo]*)+,...""."//LF// &
+                        "See Info node `(coreutils)File permissions' for more information on this"//LF// &
+                        "notation."//LF// &
+                        "FROM (or 0 if absent) gives the mode bits on which to base permissions if"//LF// &
+                        "MODES request to add, remove, or set permissions based on existing ones,"//LF// &
+                        "as in ""og+rX-w"".  NUM_MODES is the result."
         case ("file_name_sans_versions")
             entry%file = "files_fm.f90"
             entry%fortran = "file_name_sans_versions(name)"
@@ -2193,6 +2607,23 @@ contains
                         "but the visited file name is available through the minibuffer history:"//LF// &
                         "type \[next_history_element] to pull it into the minibuffer."//LF// &
                         ""//LF// &
+                        "If this command needs to split the current window, it by default obeys"//LF// &
+                        "the user options `split_height_threshold' and `split_width_threshold',"//LF// &
+                        "when it decides whether to split the window horizontally or vertically."
+        case ("find_file_read_only")
+            entry%file = "files_fm.f90"
+            entry%fortran = "call find_file_read_only(filename, status)"
+            entry%interactive = .true.
+            entry%doc = "Edit file FILENAME but don't allow changes."//LF// &
+                        "Like \[find_file], but marks buffer as read-only."//LF// &
+                        "Use \[read_only_mode] to permit editing."
+        case ("find_file_read_only_other_window")
+            entry%file = "files_fm.f90"
+            entry%fortran = "call find_file_read_only_other_window(filename, status)"
+            entry%interactive = .true.
+            entry%doc = "Edit file FILENAME in another window but don't allow changes."//LF// &
+                        "Like \[find_file_other_window], but marks buffer as read-only."//LF// &
+                        "Use \[read_only_mode] to permit editing."//LF// &
                         "If this command needs to split the current window, it by default obeys"//LF// &
                         "the user options `split_height_threshold' and `split_width_threshold',"//LF// &
                         "when it decides whether to split the window horizontally or vertically."
@@ -2506,6 +2937,11 @@ contains
             entry%file = "editfns_fm.f90"
             entry%fortran = "call goto_char(position)"
             entry%doc = "Set point to `position', clipped to the accessible region."
+        case ("help_form_show")
+            entry%file = "subr_read_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Display the output of a `help_form' (the text bound by the"//LF// &
+                        "caller)."
         case ("help_mode")
             entry%file = "help_mode_fm.f90"
             entry%interactive = .true.
@@ -3374,6 +3810,11 @@ contains
             entry%file = "derived_fm.f90"
             entry%fortran = "major_mode_named(name)"
             entry%doc = "The defined major mode named NAME, or null."
+        case ("make_empty_file")
+            entry%file = "files_fm.f90"
+            entry%fortran = "call make_empty_file(filename, status, parents)"
+            entry%doc = "Create an empty file FILENAME."//LF// &
+                        "Optional arg PARENTS, if true then creates parent dirs as needed."
         case ("make_process")
             entry%file = "process_fm.f90"
             entry%fortran = "call make_process(name, command, process, status, buffer, noquery, connection_type, filter"// &
@@ -3410,6 +3851,15 @@ contains
                         "ENVIRONMENT -- ""NAME=VALUE"" entries put first in the process's"//LF// &
                         "environment (as binding `process_environment' to an array starting"//LF// &
                         "with them does)."
+        case ("make_symbolic_link")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call make_symbolic_link(target, linkname, status, ok_if_already_exists)"
+            entry%doc = "Make a symbolic link to TARGET, named LINKNAME."//LF// &
+                        "If LINKNAME is a directory name, make a like-named symbolic link"//LF// &
+                        "under LINKNAME."//LF// &
+                        ""//LF// &
+                        "Signal a `file_already_exists' error if a file LINKNAME already exists"//LF// &
+                        "unless OK_IF_ALREADY_EXISTS is true."
         case ("make_syntax_table")
             entry%file = "syntax_fm.f90"
             entry%fortran = "call make_syntax_table(h, status, oldtable)"
@@ -4304,6 +4754,19 @@ contains
                         "If `read_buffer_completion_ignore_case' is true, completion ignores"//LF// &
                         "case while reading the buffer name."//LF// &
                         "The buffer `except' (if given) is left out of the completions."
+        case ("read_char_from_minibuffer_insert_char")
+            entry%file = "subr_read_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Insert the character you type into the minibuffer and exit minibuffer."//LF// &
+                        "Discard all previous input before inserting and exiting the minibuffer."
+        case ("read_char_from_minibuffer_insert_other")
+            entry%file = "subr_read_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Reject a disallowed character typed into the minibuffer."//LF// &
+                        "This command is intended to be bound to keys that users are not"//LF// &
+                        "allowed to type into the minibuffer.  When the user types any"//LF// &
+                        "such key, this command discard all minibuffer input and displays"//LF// &
+                        "an error message."
         case ("read_file_name_default")
             entry%file = "minibuffer_fm.f90"
             entry%fortran = "call read_file_name(prompt, result, status, dir, default_filename, mustmatch, initial)"
@@ -4390,6 +4853,26 @@ contains
                         ""//LF// &
                         "DEFAULTS, in place of DEFAULT, is an array of defaults: the first"//LF// &
                         "is the default, all are offered by M-n."
+        case ("read_only_mode")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "call read_only_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Change whether the current buffer is read-only."//LF// &
+                        ""//LF// &
+                        "If buffer is read-only and `view_read_only' is true, enter"//LF// &
+                        "view mode."//LF// &
+                        ""//LF// &
+                        "Do not call this from a program unless you really intend to"//LF// &
+                        "do the same thing as the \[read_only_mode] command, including"//LF// &
+                        "possibly enabling or disabling View mode.  Also, note that this"//LF// &
+                        "command works by setting the variable `buffer_read_only', which"//LF// &
+                        "does not affect read-only regions caused by text properties.  To"//LF// &
+                        "ignore read-only status in a program (whether due to text"//LF// &
+                        "properties or buffer state), bind `inhibit_read_only' temporarily"//LF// &
+                        "to a true value."//LF// &
+                        ""//LF// &
+                        "Reverting a buffer will keep the read-only status set by using"//LF// &
+                        "this command."
         case ("read_shell_command")
             entry%file = "simple_fm.f90"
             entry%fortran = "call read_shell_command(prompt, result, status, initial, history, default, history_positio"// &
@@ -4498,6 +4981,17 @@ contains
                         "register value, and should return true if and only if that register"//LF// &
                         "value can be used.  The register value of kind `REGISTER_EMPTY'"//LF// &
                         "represents an empty register."
+        case ("rename_file")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call rename_file(file, newname, status, ok_if_already_exists)"
+            entry%doc = "Rename FILE as NEWNAME.  Both args must be strings."//LF// &
+                        "If file has names other than FILE, it continues to have those names."//LF// &
+                        "If NEWNAME is a directory name, rename FILE to a like-named file under"//LF// &
+                        "NEWNAME.  For NEWNAME to be recognized as a directory name, it should"//LF// &
+                        "end in a slash."//LF// &
+                        ""//LF// &
+                        "Signal a `file_already_exists' error if a file NEWNAME already exists"//LF// &
+                        "unless optional third argument OK_IF_ALREADY_EXISTS is true."
         case ("replace_match")
             entry%file = "search_fm.f90"
             entry%fortran = "call replace_match(newtext, status, fixedcase, literal, string, subexp, result)"
@@ -4912,6 +5406,20 @@ contains
             entry%file = "error_fm.f90"
             entry%fortran = "call set_error(status, code, detail)"
             entry%doc = "Record an error.  The analogue of upstream `xsignal'."
+        case ("set_file_modes")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call set_file_modes(filename, mode, status, nofollow)"
+            entry%doc = "Set mode bits of file named FILENAME to MODE (an integer)."//LF// &
+                        "Only the 12 low bits of MODE are used.  If optional NOFOLLOW is"//LF// &
+                        "true, do not follow FILENAME if it is a symbolic link."
+        case ("set_file_times")
+            entry%file = "fileio_fm.f90"
+            entry%fortran = "call set_file_times(filename, status, mtime_sec, mtime_nsec, nofollow)"
+            entry%doc = "Set times of file FILENAME to MTIME_SEC and MTIME_NSEC (seconds"//LF// &
+                        "and nanoseconds since the epoch).  If optional NOFOLLOW is true,"//LF// &
+                        "do not follow FILENAME if it is a symbolic link.  Set both access"//LF// &
+                        "and modification times.  Use the current time if MTIME_SEC is"//LF// &
+                        "absent."
         case ("set_fill_column")
             entry%file = "simple_fill_fm.f90"
             entry%interactive = .true.
@@ -5442,6 +5950,204 @@ contains
                         ""//LF// &
                         "With negative argument, convert previous words but do not move."//LF// &
                         "See also `capitalize_word'."
+        case ("view_back_to_mark")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Return to last mark set in View mode, else beginning of file."//LF// &
+                        "Display that line at the center of the window."//LF// &
+                        "This command pops the mark ring, so that successive"//LF// &
+                        "invocations return to earlier marks."
+        case ("view_buffer")
+            entry%file = "view_fm.f90"
+            entry%fortran = "call view_buffer(buffer, status, exit_action)"
+            entry%interactive = .true.
+            entry%doc = "View BUFFER in View mode, returning to previous buffer when done."//LF// &
+                        "Emacs commands editing the buffer contents are not available; instead, a"//LF// &
+                        "special set of commands (mostly letters and punctuation) are defined for"//LF// &
+                        "moving around in the buffer."//LF// &
+                        "Space scrolls forward, Delete scrolls backward."//LF// &
+                        "For a list of all View commands, type H or h while viewing."//LF// &
+                        ""//LF// &
+                        "This command runs the normal hook `view_mode_hook'."//LF// &
+                        ""//LF// &
+                        "This function does not enable View mode if the buffer's major mode"//LF// &
+                        "has a `special' mode-class, because such modes usually have their"//LF// &
+                        "own View-like bindings."
+        case ("view_buffer_other_window")
+            entry%file = "view_fm.f90"
+            entry%fortran = "call view_buffer_other_window(buffer, status, exit_action)"
+            entry%interactive = .true.
+            entry%doc = "View BUFFER in View mode in another window."//LF// &
+                        "Emacs commands editing the buffer contents are not available;"//LF// &
+                        "instead, a special set of commands (mostly letters and"//LF// &
+                        "punctuation) are defined for moving around in the buffer."//LF// &
+                        "Space scrolls forward, Delete scrolls backward."//LF// &
+                        "For a list of all View commands, type H or h while viewing."//LF// &
+                        ""//LF// &
+                        "This command runs the normal hook `view_mode_hook'."//LF// &
+                        ""//LF// &
+                        "This function does not enable View mode if the buffer's major mode"//LF// &
+                        "has a `special' mode-class, because such modes usually have their"//LF// &
+                        "own View-like bindings."//LF// &
+                        ""//LF// &
+                        "If this command needs to split the current window, it by default obeys"//LF// &
+                        "the user options `split_height_threshold' and `split_width_threshold',"//LF// &
+                        "when it decides whether to split the window horizontally or vertically."
+        case ("view_exit")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Exit View mode but stay in current buffer."
+        case ("view_exit_and_edit")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Exit View mode and make the current buffer editable."
+        case ("view_file")
+            entry%file = "view_fm.f90"
+            entry%fortran = "call view_file(file, status)"
+            entry%interactive = .true.
+            entry%doc = "View FILE in View mode, returning to previous buffer when done."//LF// &
+                        "Emacs commands editing the buffer contents are not available; instead, a"//LF// &
+                        "special set of commands (mostly letters and punctuation) are defined for"//LF// &
+                        "moving around in the buffer."//LF// &
+                        "Space scrolls forward, Delete scrolls backward."//LF// &
+                        "For a list of all View commands, type H or h while viewing."//LF// &
+                        ""//LF// &
+                        "This command runs the normal hook `view_mode_hook'."
+        case ("view_file_other_window")
+            entry%file = "view_fm.f90"
+            entry%fortran = "call view_file_other_window(file, status)"
+            entry%interactive = .true.
+            entry%doc = "View FILE in View mode in another window."//LF// &
+                        "When done, return that window to its previous buffer, and kill the"//LF// &
+                        "buffer visiting FILE if unmodified and if it wasn't visited before."//LF// &
+                        ""//LF// &
+                        "Emacs commands editing the buffer contents are not available; instead,"//LF// &
+                        "a special set of commands (mostly letters and punctuation)"//LF// &
+                        "are defined for moving around in the buffer."//LF// &
+                        "Space scrolls forward, Delete scrolls backward."//LF// &
+                        "For a list of all View commands, type H or h while viewing."//LF// &
+                        ""//LF// &
+                        "This command runs the normal hook `view_mode_hook'."//LF// &
+                        ""//LF// &
+                        "If this command needs to split the current window, it by default obeys"//LF// &
+                        "the user options `split_height_threshold' and `split_width_threshold',"//LF// &
+                        "when it decides whether to split the window horizontally or vertically."
+        case ("view_goto_line")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Move to first (or prefix LINE) line in View mode."//LF// &
+                        "Display is centered at LINE."//LF// &
+                        "Also set the mark at the position where point was."
+        case ("view_goto_percent")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Move to end (or prefix PERCENT) of buffer in View mode."//LF// &
+                        "Display is centered at point."//LF// &
+                        "Also set the mark at the position where point was."
+        case ("view_kill_and_leave")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Quit View mode, kill current buffer and return to previous buffer."
+        case ("view_leave")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Quit View mode and maybe switch buffers, but don't kill this buffer."
+        case ("view_mode")
+            entry%file = "view_fm.f90"
+            entry%fortran = "call view_mode(status)"
+            entry%interactive = .true.
+            entry%doc = "Toggle View mode, a minor mode for viewing text but not editing it."//LF// &
+                        ""//LF// &
+                        "When View mode is enabled, commands that do not change the buffer"//LF// &
+                        "contents are available as usual.  Kill commands save text but"//LF// &
+                        "do not delete it from the buffer.  Most other commands beep and"//LF// &
+                        "tell the user that the buffer is read-only."//LF// &
+                        ""//LF// &
+                        "\<view_mode_map>"//LF// &
+                        ""//LF// &
+                        "The following additional commands are provided.  Most commands"//LF// &
+                        "take prefix arguments.  Page commands default to ""page size"""//LF// &
+                        "lines which is almost a whole window, or number of lines set by"//LF// &
+                        "\[view_scroll_page_forward_set_page_size] or \[view_scroll_page_backward_set_page_size]."//LF// &
+                        "Half page commands default to and set ""half page size"" lines"//LF// &
+                        "which initially is half a window full.  Search commands default"//LF// &
+                        "to a repeat count of one."//LF// &
+                        ""//LF// &
+                        "H, h, ?         This message."//LF// &
+                        "Digits        provide prefix arguments."//LF// &
+                        "\[negative_argument]        negative prefix argument."//LF// &
+                        "\[beginning_of_buffer]        move to the beginning of buffer."//LF// &
+                        ">        move to the end of buffer."//LF// &
+                        "\[view_scroll_to_buffer_end]        scroll so that buffer end is at last line of window."//LF// &
+                        "SPC        scroll forward ""page size"" lines."//LF// &
+                        "          With prefix scroll forward prefix lines."//LF// &
+                        "DEL, S-SPC  scroll backward ""page size"" lines."//LF// &
+                        "              With prefix scroll backward prefix lines."//LF// &
+                        "\[view_scroll_page_forward_set_page_size]        like  \[view_scroll_page_forward]"//LF// &
+                        "          but with prefix sets ""page size"" to prefix."//LF// &
+                        "\[view_scroll_page_backward_set_page_size]        like  \[view_scroll_page_backward]"//LF// &
+                        "          but with prefix sets ""page size"" to prefix."//LF// &
+                        "\[view_scroll_half_page_forward]        scroll forward ""half page size"" lines.  With prefi"// &
+                        "x, sets"//LF// &
+                        "          ""half page size"" to prefix lines and scrolls forward that much."//LF// &
+                        "\[view_scroll_half_page_backward]        scroll backward ""half page size"" lines.  With pre"// &
+                        "fix, sets"//LF// &
+                        "          ""half page size"" to prefix lines and scrolls backward that much."//LF// &
+                        "RET, LFD  scroll forward one line.  With prefix scroll forward prefix line(s)."//LF// &
+                        "y        scroll backward one line.  With prefix scroll backward prefix line(s)."//LF// &
+                        "\[what_line]        prints the current line number."//LF// &
+                        "\[view_goto_percent]        goes prefix argument (default 100) percent into buffer."//LF// &
+                        "\[view_goto_line]        goes to line given by prefix argument (default first line)."//LF// &
+                        ".        set the mark."//LF// &
+                        "x        exchanges point and mark."//LF// &
+                        "\[view_back_to_mark]        return to mark and pops mark ring."//LF// &
+                        "          Mark ring is pushed at start of every successful search and when"//LF// &
+                        "          jump to line occurs.  The mark is set on jump to buffer start or end."//LF// &
+                        "\[point_to_register]        save current position in character register."//LF// &
+                        "'        go to position saved in character register."//LF// &
+                        "s        do forward incremental search."//LF// &
+                        "r        do reverse incremental search."//LF// &
+                        "\[view_search_regexp_forward]        searches forward for regular expression, starting aft"// &
+                        "er current page."//LF// &
+                        "          ! and @ have a special meaning at the beginning of the regexp."//LF// &
+                        "          ! means search for a line with no match for regexp.  @ means start"//LF// &
+                        "          search at beginning (end for backward search) of buffer."//LF// &
+                        "\        searches backward for regular expression, starting before current page."//LF// &
+                        "\[view_search_last_regexp_forward]        searches forward for last regular expression."//LF// &
+                        "p        searches backward for last regular expression."//LF// &
+                        "\[view_quit]        quit View mode, restoring this window and buffer to previous state."//LF// &
+                        "          \[view_quit] is the normal way to leave view mode."//LF// &
+                        "\[view_exit]        exit View mode but stay in current buffer.  Use this if you started"//LF// &
+                        "          viewing a buffer (file) and find out you want to edit it."//LF// &
+                        "          This command restores the previous read-only status of the buffer."//LF// &
+                        "\[view_exit_and_edit]        exit View mode, and make the current buffer editable"//LF// &
+                        "          even if it was not editable before entry to View mode."//LF// &
+                        "\[view_quit_all]        quit View mode, restoring all windows to previous state."//LF// &
+                        "\[view_leave]        quit View mode and maybe switch buffers, but don't kill this buffer."//LF// &
+                        "\[view_kill_and_leave]        quit View mode, kill current buffer and go back to other buf"// &
+                        "fer."//LF// &
+                        ""//LF// &
+                        "The effect of \[view_leave], \[view_quit] and \[view_kill_and_leave] depends on how view_m"// &
+                        "ode was entered.  If it was"//LF// &
+                        "entered by view_file, view_file_other_window, or the Dired mode v command,"//LF// &
+                        "then \[view_quit] will try to kill the current buffer."//LF// &
+                        "If view_mode was entered from another buffer, by \[view_buffer],"//LF// &
+                        "\[view_buffer_other_window], \[view_file], or \[view_file_other_window],"//LF// &
+                        "then \[view_leave], \[view_quit] and \[view_kill_and_leave] will return to that buffer."//LF// &
+                        ""//LF// &
+                        "Entry to view_mode runs the normal hook `view_mode_hook'."
+        case ("view_quit")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Quit View mode, trying to restore window and buffer to previous state."//LF// &
+                        "Maybe kill this buffer.  Try to restore selected window to previous state"//LF// &
+                        "and go to previous buffer or window."
+        case ("view_quit_all")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Quit View mode, trying to restore windows and buffers to previous state."//LF// &
+                        "Maybe kill current buffer.  Try to restore all windows viewing buffer to"//LF// &
+                        "previous state and go to previous buffer or window."
         case ("view_register")
             entry%file = "register_fm.f90"
             entry%fortran = "call view_register(register, status)"
@@ -5450,6 +6156,110 @@ contains
                         "REGISTER is a character, the name of the register."//LF// &
                         ""//LF// &
                         "Interactively, prompt for REGISTER using `register_read_with_preview'."
+        case ("view_scroll_half_page_backward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll backward a ""half page"" (or prefix LINES) lines in View mode."//LF// &
+                        "See also `view_scroll_half_page_forward'."
+        case ("view_scroll_half_page_forward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll forward a ""half page"" (or prefix LINES) lines in View mode."//LF// &
+                        "If LINES is not omitted, the ""half page size"" is set to the minimum of"//LF// &
+                        "window height and the absolute value of LINES."//LF// &
+                        "LINES=0 resets ""half page size"" to half window height."
+        case ("view_scroll_line_backward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll backward one line (or prefix LINES lines) in View mode."//LF// &
+                        "See also `view_scroll_line_forward'."
+        case ("view_scroll_line_forward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll forward one line (or prefix LINES lines) in View mode."//LF// &
+                        "See also `view_scroll_page_forward', but note that scrolling is limited"//LF// &
+                        "to minimum of LINES and one window-full."
+        case ("view_scroll_page_backward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll ""page size"" or prefix LINES lines backward in View mode."//LF// &
+                        "See also `view_scroll_page_forward'."
+        case ("view_scroll_page_backward_set_page_size")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll backward prefix LINES lines in View mode, setting the ""page size""."//LF// &
+                        "See also `view_scroll_page_forward_set_page_size'."
+        case ("view_scroll_page_forward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll ""page size"" or prefix LINES lines forward in View mode."//LF// &
+                        "Exit if end of text is visible and `view_scroll_auto_exit' is true."//LF// &
+                        """page size"" is whole window full, or number of lines set by"//LF// &
+                        "\[view_scroll_page_forward_set_page_size] or"//LF// &
+                        "\[view_scroll_page_backward_set_page_size]."//LF// &
+                        "If LINES is more than a window-full, only the last window-full is shown."
+        case ("view_scroll_page_forward_set_page_size")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll forward LINES lines in View mode, setting the ""page size""."//LF// &
+                        "This is the number of lines which \[view_scroll_page_forward] and"//LF// &
+                        "\[view_scroll_page_backward] scroll by default."//LF// &
+                        "If LINES is omitted or = 0, sets ""page size"" to window height and"//LF// &
+                        "scrolls forward that much, otherwise scrolls forward LINES lines and sets"//LF// &
+                        """page size"" to the minimum of window height and the absolute value of LINES."//LF// &
+                        "See also `view_scroll_page_forward'."
+        case ("view_scroll_to_buffer_end")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Scroll backward or forward so that buffer end is at last line of"//LF// &
+                        "window."
+        case ("view_search_last_regexp_backward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Search backward for first (or prefix Nth) instance of last regexp in View mode."//LF// &
+                        "Displays line found at center of window.  Sets mark at starting position and"//LF// &
+                        "pushes mark ring."
+        case ("view_search_last_regexp_forward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Search forward for first (or prefix Nth) instance of last regexp in View mode."//LF// &
+                        "Displays line found at center of window.  Sets mark at starting position and"//LF// &
+                        "pushes mark ring."
+        case ("view_search_regexp_backward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Search backward for first (or prefix Nth) occurrence of REGEXP in View mode."//LF// &
+                        ""//LF// &
+                        "Displays line found at center of window.  Sets mark at starting position and"//LF// &
+                        "pushes mark ring."//LF// &
+                        ""//LF// &
+                        "Characters @ and ! are special at the beginning of REGEXP.  They modify"//LF// &
+                        "the search rather than become part of the pattern searched for."//LF// &
+                        "@ means search all the buffer i.e. start search at the end of buffer."//LF// &
+                        "! means search for a line that contains no match for the pattern."//LF// &
+                        "If REGEXP is empty or only consist of these control characters, then"//LF// &
+                        "an earlier remembered REGEXP is used, otherwise REGEXP is remembered"//LF// &
+                        "for use by later search commands."
+        case ("view_search_regexp_forward")
+            entry%file = "view_fm.f90"
+            entry%interactive = .true.
+            entry%doc = "Search forward for first (or prefix Nth) occurrence of REGEXP in View mode."//LF// &
+                        ""//LF// &
+                        "Displays line found at center of window.  Sets mark at starting position and"//LF// &
+                        "pushes mark ring."//LF// &
+                        ""//LF// &
+                        "Characters @ and ! are special at the beginning of REGEXP.  They modify"//LF// &
+                        "the search rather than become part of the pattern searched for."//LF// &
+                        "@ means search all the buffer i.e. start search at the beginning of buffer."//LF// &
+                        "! means search for a line that contains no match for the pattern."//LF// &
+                        "If REGEXP is empty or only consist of these control characters, then"//LF// &
+                        "an earlier remembered REGEXP is used, otherwise REGEXP is remembered"//LF// &
+                        "for use by later search commands."
+        case ("what_line")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "call what_line(status)"
+            entry%interactive = .true.
+            entry%doc = "Print the current buffer line number and narrowed line number of point."
         case ("where_is")
             entry%file = "help_fm.f90"
             entry%interactive = .true.
@@ -5931,6 +6741,15 @@ contains
             entry%original = "0"
             entry%value = repr(completions_max_height)
             entry%doc = "Maximum height for *Completions* buffer window (0 for no maximum)."
+        case ("copy_directory_create_symlink")
+            entry%file = "files_fm.f90"
+            entry%fortran = "copy_directory_create_symlink"
+            entry%original = ".false."
+            entry%value = repr(copy_directory_create_symlink)
+            entry%doc = "This option influences the handling of symbolic links in `copy_directory'."//LF// &
+                        "If true, `copy_directory' will create a symbolic link if the"//LF// &
+                        "source directory is a symbolic link.  If false, it'll follow the"//LF// &
+                        "symbolic link and copy the contents instead."
         case ("copy_region_blink_delay")
             entry%file = "simple_fm.f90"
             entry%fortran = "copy_region_blink_delay"
@@ -6112,6 +6931,141 @@ contains
             entry%doc = "Whether symlinks are checked for validity."//LF// &
                         "Set it to false for remote directories, which suffer from a slow"//LF// &
                         "connection."
+        case ("dired_chown_program")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_chown_program"
+            if (allocated(dired_chown_program)) then
+                entry%value = repr(dired_chown_program)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Name of chown command (usually `chown')."
+        case ("dired_compress_directory_default_suffix")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_compress_directory_default_suffix"
+            if (allocated(dired_compress_directory_default_suffix)) then
+                entry%value = repr(dired_compress_directory_default_suffix)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Default suffix for compressing a directory."//LF// &
+                        "If empty, "".tar.gz"" will be used."
+        case ("dired_compress_file_alist")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_compress_file_alist"
+            entry%doc = "Controls the compression shell command for `dired_do_compress_to'."//LF// &
+                        ""//LF// &
+                        "Each element is (REGEXP . CMD), where REGEXP is the name of the"//LF// &
+                        "archive to which you want to compress, and CMD is the"//LF// &
+                        "corresponding command."//LF// &
+                        ""//LF// &
+                        "Within CMD, %i denotes the input file(s), and %o denotes the"//LF// &
+                        "output file.  %i path(s) are relative, while %o is absolute."
+        case ("dired_compress_file_default_suffix")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_compress_file_default_suffix"
+            if (allocated(dired_compress_file_default_suffix)) then
+                entry%value = repr(dired_compress_file_default_suffix)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Default suffix for compressing a single file."//LF// &
+                        "If empty, "".gz"" will be used."
+        case ("dired_compress_file_suffixes")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_compress_file_suffixes"
+            entry%doc = "Control changes in file name suffixes for compression and uncompression."//LF// &
+                        "Each element specifies one transformation rule, and has the form:"//LF// &
+                        "  (REGEXP NEW-SUFFIX PROGRAM)"//LF// &
+                        "The rule applies when the old file name matches REGEXP."//LF// &
+                        "The new file name is computed by deleting the part that matches REGEXP"//LF// &
+                        " (as well as anything after that), then adding NEW-SUFFIX in its place."//LF// &
+                        "If PROGRAM is not empty, the rule is an uncompression rule,"//LF// &
+                        "and uncompression is done by running PROGRAM."//LF// &
+                        ""//LF// &
+                        "Within PROGRAM, %i denotes the input file, and %o denotes the"//LF// &
+                        "output file."//LF// &
+                        ""//LF// &
+                        "Otherwise, the rule is a compression rule, and compression is done with gzip."//LF// &
+                        "ARGS are command switches passed to PROGRAM."
+        case ("dired_compress_files_alist")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_compress_files_alist"
+            entry%doc = "Controls the compression shell command for `dired_do_compress_to'."//LF// &
+                        ""//LF// &
+                        "Each element is (REGEXP . CMD), where REGEXP is the name of the"//LF// &
+                        "archive to which you want to compress, and CMD is the"//LF// &
+                        "corresponding command."//LF// &
+                        ""//LF// &
+                        "Within CMD, %i denotes the input file(s), and %o denotes the"//LF// &
+                        "output file.  %i path(s) are relative, while %o is absolute."
+        case ("dired_copy_dereference")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_copy_dereference"
+            entry%original = ".false."
+            entry%value = repr(dired_copy_dereference)
+            entry%doc = "If true, Dired dereferences symlinks when copying them."//LF// &
+                        "This is similar to the ""-L"" option for the ""cp"" shell command."
+        case ("dired_copy_preserve_time")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_copy_preserve_time"
+            entry%original = ".true."
+            entry%value = repr(dired_copy_preserve_time)
+            entry%doc = "If true, Dired preserves the last-modified time in a file copy."//LF// &
+                        "(This works on only some systems.)"
+        case ("dired_create_destination_dirs")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_create_destination_dirs"
+            entry%original = "DIRED_CREATE_DESTINATION_DIRS_NIL"
+            select case (dired_create_destination_dirs)
+            case (DIRED_CREATE_DESTINATION_DIRS_NIL)
+                entry%value = "DIRED_CREATE_DESTINATION_DIRS_NIL"
+            case (DIRED_CREATE_DESTINATION_DIRS_ALWAYS)
+                entry%value = "DIRED_CREATE_DESTINATION_DIRS_ALWAYS"
+            case (DIRED_CREATE_DESTINATION_DIRS_ASK)
+                entry%value = "DIRED_CREATE_DESTINATION_DIRS_ASK"
+            case default
+                entry%value = repr(dired_create_destination_dirs)
+            end select
+            entry%doc = "Whether Dired should create destination dirs when copying/moving files."//LF// &
+                        "If DIRED_CREATE_DESTINATION_DIRS_NIL, don't create non-existent destination directories."//LF// &
+                        "If DIRED_CREATE_DESTINATION_DIRS_ASK, ask the user whether to create them."//LF// &
+                        "If DIRED_CREATE_DESTINATION_DIRS_ALWAYS, create them without asking."//LF// &
+                        ""//LF// &
+                        "Also see `dired_create_destination_dirs_on_trailing_dirsep'."
+        case ("dired_create_destination_dirs_on_trailing_dirsep")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_create_destination_dirs_on_trailing_dirsep"
+            entry%original = ".false."
+            entry%value = repr(dired_create_destination_dirs_on_trailing_dirsep)
+            entry%doc = "If true, consider a file name ending in a slash as a directory to create."//LF// &
+                        ""//LF// &
+                        "If this variable is true and a single destination file name of"//LF// &
+                        "a Dired command ends in a directory separator (/), that file name"//LF// &
+                        "will be treated as a non-existent directory, and that directory"//LF// &
+                        "will be created if the variable `dired_create_destination_dirs'"//LF// &
+                        "says so."//LF// &
+                        ""//LF// &
+                        "For example, if both `dired_create_destination_dirs' and this"//LF// &
+                        "option are set, renaming a directory named `old_name' to"//LF// &
+                        "`new_name/' (note the trailing directory separator) will"//LF// &
+                        "create `new_name' if it does not already exist, and will"//LF// &
+                        "move `old_name' into it.  By contrast, if only `new_name'"//LF// &
+                        "(without the trailing /) is given, or this option or"//LF// &
+                        "`dired_create_destination_dirs' is not set, `old_name' will be"//LF// &
+                        "renamed to `new_name'."
+        case ("dired_create_empty_file_in_current_directory")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_create_empty_file_in_current_directory"
+            entry%original = ".false."
+            entry%value = repr(dired_create_empty_file_in_current_directory)
+            entry%doc = "Whether `dired_create_empty_file' acts on the current directory."//LF// &
+                        "If true, `dired_create_empty_file' creates a new empty file and adds"//LF// &
+                        "an entry for it (or its topmost new parent directory if created) under"//LF// &
+                        "the current subdirectory in the Dired buffer by default (otherwise, it"//LF// &
+                        "adds the new file (and new subdirectories if provided) to whichever"//LF// &
+                        "directory the user enters at the prompt).  If false,"//LF// &
+                        "`dired_create_empty_file' acts on the default directory by default."
         case ("dired_del_marker")
             entry%file = "dired_mode_fm.f90"
             entry%fortran = "dired_del_marker"
@@ -6131,6 +7085,44 @@ contains
                 entry%value = "unallocated"
             end if
             entry%doc = "Face name used for subdirectories."
+        case ("dired_do_revert_buffer")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_do_revert_buffer"
+            entry%original = ".false."
+            entry%value = repr(dired_do_revert_buffer)
+            entry%doc = "Automatically revert Dired buffers after `dired_do' operations."//LF// &
+                        "This option controls whether to refresh the directory listing in a"//LF// &
+                        "Dired buffer that is the destination of one of these operations:"//LF// &
+                        "`dired_do_copy', `dired_do_rename', `dired_do_symlink', `dired_do_hardlink'."//LF// &
+                        "If the value is true, always revert the Dired buffer updated in the result"//LF// &
+                        "of these operations."
+        case ("dired_dwim_target")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_dwim_target"
+            entry%original = "DIRED_DWIM_TARGET_NIL"
+            select case (dired_dwim_target)
+            case (DIRED_DWIM_TARGET_NIL)
+                entry%value = "DIRED_DWIM_TARGET_NIL"
+            case (DIRED_DWIM_TARGET_NEXT)
+                entry%value = "DIRED_DWIM_TARGET_NEXT"
+            case (DIRED_DWIM_TARGET_NEXT_VISIBLE)
+                entry%value = "DIRED_DWIM_TARGET_NEXT_VISIBLE"
+            case (DIRED_DWIM_TARGET_RECENT)
+                entry%value = "DIRED_DWIM_TARGET_RECENT"
+            case default
+                entry%value = repr(dired_dwim_target)
+            end select
+            entry%doc = "If set, Dired tries to guess a default target directory."//LF// &
+                        "This means: if there is a Dired buffer displayed in some window,"//LF// &
+                        "use its current directory, instead of this Dired buffer's"//LF// &
+                        "current directory."//LF// &
+                        ""//LF// &
+                        "You can set it to prefer either the next window with a Dired buffer"//LF// &
+                        "(DIRED_DWIM_TARGET_NEXT, or DIRED_DWIM_TARGET_NEXT_VISIBLE on"//LF// &
+                        "visible frames), or the most recently used window with a Dired"//LF// &
+                        "buffer (DIRED_DWIM_TARGET_RECENT)."//LF// &
+                        ""//LF// &
+                        "The target is used in the prompt for file copy, rename etc."
         case ("dired_flagged")
             entry%file = "dired_mode_fm.f90"
             entry%fortran = "dired_flagged"
@@ -6205,6 +7197,50 @@ contains
             entry%fortran = "dired_initial_position_hook"
             entry%doc = "This hook is used to position the point."//LF// &
                         "It is run by the function `dired_initial_position'."
+        case ("dired_keep_marker_copy")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_keep_marker_copy"
+            entry%original = """C"""
+            entry%value = repr(dired_keep_marker_copy)
+            entry%doc = "Controls marking of copied files."//LF// &
+                        "If DIRED_KEEP_MARKER, copied files are marked if and as the corresponding original files w"// &
+                        "ere."//LF// &
+                        "If a character, copied files are unconditionally marked with that character."
+        case ("dired_keep_marker_hardlink")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_keep_marker_hardlink"
+            entry%original = """H"""
+            entry%value = repr(dired_keep_marker_hardlink)
+            entry%doc = "Controls marking of newly made hard links."//LF// &
+                        "If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked."//LF// &
+                        "If a character, new links are unconditionally marked with that character."
+        case ("dired_keep_marker_relsymlink")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_keep_marker_relsymlink"
+            entry%original = """S"""
+            entry%value = repr(dired_keep_marker_relsymlink)
+            entry%doc = "Controls marking of newly made relative symbolic links."//LF// &
+                        "If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked."//LF// &
+                        "If a character, new links are unconditionally marked with that character."
+        case ("dired_keep_marker_rename")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_keep_marker_rename"
+            entry%original = "DIRED_KEEP_MARKER"
+            entry%value = repr(dired_keep_marker_rename)
+            entry%doc = "Controls marking of renamed files."//LF// &
+                        "If DIRED_KEEP_MARKER, files keep their previous marks when they are renamed."//LF// &
+                        "If a character, renamed files (whether previously marked or not)"//LF// &
+                        "are afterward marked with that character."//LF// &
+                        "This option affects only files renamed by `dired_do_rename' and"//LF// &
+                        "`dired_do_rename_regexp'."
+        case ("dired_keep_marker_symlink")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_keep_marker_symlink"
+            entry%original = """Y"""
+            entry%value = repr(dired_keep_marker_symlink)
+            entry%doc = "Controls marking of newly made symbolic links."//LF// &
+                        "If DIRED_KEEP_MARKER, they are marked if and as the files linked to were marked."//LF// &
+                        "If a character, new links are unconditionally marked with that character."
         case ("dired_listing_switches")
             entry%file = "dired_mode_fm.f90"
             entry%fortran = "dired_listing_switches"
@@ -6375,6 +7411,27 @@ contains
                 entry%value = "unallocated"
             end if
             entry%doc = "Face name used for permissions of group- and world-writable files."
+        case ("dired_recursive_copies")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_recursive_copies"
+            entry%original = "DIRED_RECURSIVE_TOP"
+            select case (dired_recursive_copies)
+            case (DIRED_RECURSIVE_NEVER)
+                entry%value = "DIRED_RECURSIVE_NEVER"
+            case (DIRED_RECURSIVE_ALWAYS)
+                entry%value = "DIRED_RECURSIVE_ALWAYS"
+            case (DIRED_RECURSIVE_TOP)
+                entry%value = "DIRED_RECURSIVE_TOP"
+            case (DIRED_RECURSIVE_ASK)
+                entry%value = "DIRED_RECURSIVE_ASK"
+            case default
+                entry%value = repr(dired_recursive_copies)
+            end select
+            entry%doc = "Whether Dired copies directories recursively."//LF// &
+                        "If DIRED_RECURSIVE_NEVER, never copy recursively."//LF// &
+                        "DIRED_RECURSIVE_ALWAYS means to copy recursively without asking."//LF// &
+                        "DIRED_RECURSIVE_TOP means to ask for each directory at top level."//LF// &
+                        "DIRED_RECURSIVE_ASK means to ask for each directory."
         case ("dired_recursive_deletes")
             entry%file = "dired_mode_fm.f90"
             entry%fortran = "dired_recursive_deletes"
@@ -6445,6 +7502,15 @@ contains
                 entry%value = "unallocated"
             end if
             entry%doc = "Face name used for symbolic links."
+        case ("dired_touch_program")
+            entry%file = "dired_mode_fm.f90"
+            entry%fortran = "dired_touch_program"
+            if (allocated(dired_touch_program)) then
+                entry%value = repr(dired_touch_program)
+            else
+                entry%value = "unallocated"
+            end if
+            entry%doc = "Name of touch command (usually `touch')."
         case ("dired_trivial_filenames")
             entry%file = "dired_mode_fm.f90"
             entry%fortran = "dired_trivial_filenames"
@@ -7352,6 +8418,10 @@ contains
                         ""//LF// &
                         "If this is false, window configurations are not restored upon"//LF// &
                         "exiting the minibuffer."
+        case ("read_only_mode_hook")
+            entry%file = "simple_fm.f90"
+            entry%fortran = "read_only_mode_hook"
+            entry%doc = "Hook run after entering or leaving `read_only_mode'."
         case ("read_quoted_char_radix")
             entry%file = "simple_fm.f90"
             entry%fortran = "read_quoted_char_radix"
@@ -7864,6 +8934,59 @@ contains
             entry%doc = "File name, including directory, of user's initialization file."//LF// &
                         "While the init file's `configure' runs, value is the real name"//LF// &
                         "of the file."
+        case ("view_exits_all_viewing_windows")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_exits_all_viewing_windows"
+            entry%original = ".false."
+            entry%value = repr(view_exits_all_viewing_windows)
+            entry%doc = "True means restore all windows used to view buffer."//LF// &
+                        "Commands that restore windows when finished viewing a buffer,"//LF// &
+                        "apply to all windows that display the buffer and have restore"//LF// &
+                        "information.  If `view_exits_all_viewing_windows' is false, only"//LF// &
+                        "the selected window is considered for restoring."
+        case ("view_inhibit_help_message")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_inhibit_help_message"
+            entry%original = ".false."
+            entry%value = repr(view_inhibit_help_message)
+            entry%doc = "True inhibits the help message shown upon entering View mode."//LF// &
+                        "This setting takes effect only when View mode is entered via an"//LF// &
+                        "interactive command; otherwise the help message is not shown."
+        case ("view_mode_hook")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_mode_hook"
+            entry%doc = "Normal hook run when starting to view a buffer or file."
+        case ("view_mode_map")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_mode_map"
+            entry%doc = "Keymap for `view_mode'."
+        case ("view_no_disable_on_exit")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_no_disable_on_exit"
+            entry%original = ".false."
+            entry%value = repr(view_no_disable_on_exit)
+            entry%doc = "If true, View mode ""exit"" commands don't actually disable View mode."//LF// &
+                        "Instead, these commands just switch buffers or windows."//LF// &
+                        "This is set in certain buffers by specialized features such as help commands"//LF// &
+                        "that use View mode automatically."
+        case ("view_read_only")
+            entry%file = "files_fm.f90"
+            entry%fortran = "view_read_only"
+            entry%original = ".false."
+            entry%value = repr(view_read_only)
+            entry%doc = "True means buffers visiting files read-only do so in view mode."//LF// &
+                        "In fact, this means that all read-only buffers normally have"//LF// &
+                        "View mode enabled, including buffers that are read-only because"//LF// &
+                        "you visit a file you cannot alter, and buffers you make read-only"//LF// &
+                        "using \[read_only_mode]."
+        case ("view_scroll_auto_exit")
+            entry%file = "view_fm.f90"
+            entry%fortran = "view_scroll_auto_exit"
+            entry%original = ".false."
+            entry%value = repr(view_scroll_auto_exit)
+            entry%doc = "True means scrolling past the end of buffer exits View mode."//LF// &
+                        "False means attempting to scroll past the end of the buffer,"//LF// &
+                        "only rings the bell and gives a message on how to leave."
         case ("visible_bell")
             entry%file = "term_fm.f90"
             entry%fortran = "visible_bell"
