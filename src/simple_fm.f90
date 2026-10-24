@@ -44,7 +44,7 @@ module simple_fm
     use lisp_fm, only: value_type, nil, make_fixnum, list, fixnump, consp, &
                        nilp, xfixnum, list_elt, t_value, make_string, make_list, list_elements
     use lread_fm, only: sym
-    use data_fm, only: value_eq, string_setting, logical_setting, integer_setting
+    use data_fm, only: value_eq, string_setting, logical_setting, integer_setting, function_setting
     use character_fm, only: MAX_CHAR, CHAR_META, char_resolve_modifier_mask
     use casetab_fm, only: downcase
     use buffer_fm, only: resolve_buffer, buf_bytes, BEG, BEG_BYTE
@@ -105,6 +105,9 @@ module simple_fm
 
     public :: execute_extended_command, read_extended_command
     public :: fundamental_mode, special_mode, syms_of_simple_modes
+    public :: async_shell_command, shell_command_sentinel
+    public :: set_next_error_function, has_next_error_function, next_error_buffer_p, next_error_find_buffer, &
+              next_error, next_error_internal, next_error_found, syms_of_simple_next_error
     public :: read_shell_command, shell_command, shell_command_on_region, display_message_or_buffer, &
               syms_of_simple_shell
 
@@ -425,8 +428,13 @@ module simple_fm
 
         !> Execute string COMMAND in inferior shell; display output, if any.
         !>
-        !> If COMMAND ends in `&', execute it asynchronously (not ported
-        !> yet: an error).  Otherwise, COMMAND is executed synchronously.
+        !> If COMMAND ends in `&', execute it asynchronously.
+        !> The output appears in the buffer whose name is specified
+        !> by `shell_command_buffer_name_async'.  That buffer is in major
+        !> mode specified by the variable `async_shell_command_mode'.  You
+        !> can also use `async_shell_command' that automatically adds `&'.
+        !>
+        !> Otherwise, COMMAND is executed synchronously.
         !> The output appears in the buffer named by
         !> `shell_command_buffer_name'.  If the output is short enough to
         !> display in the echo area, it is shown there, but it is
@@ -489,6 +497,48 @@ module simple_fm
             type(status_type), intent(out) :: status
         end subroutine display_message_or_buffer
 
+        !> Execute string COMMAND asynchronously in background.
+        !>
+        !> Like `shell_command', but adds `&' at the end of COMMAND to
+        !> execute it asynchronously.
+        !>
+        !> The output appears in OUTPUT_BUFFER (a buffer) or the buffer
+        !> named OUTPUT_BUFFER_NAME, and defaults to
+        !> `shell_command_buffer_name_async' if both are absent.  That
+        !> buffer is in major mode specified by the variable
+        !> `async_shell_command_mode'.
+        !>
+        !> You can customize `async_shell_command_buffer' to specify what to
+        !> do when the buffer specified by `shell_command_buffer_name_async'
+        !> is already taken by another running shell command.
+        !>
+        !> Optional argument ERROR_BUFFER is for backward compatibility; it
+        !> is ignored, and error output of the async command is always
+        !> mingled with its regular output.
+        !>
+        !> In Fortran code, you will often be better served by calling
+        !> `start_process' directly, since it offers more control and does
+        !> not impose the use of a shell (with its need to quote arguments).
+        !> Port of simple.el:async-shell-command.  (In simple_shell_fm.)
+        module subroutine async_shell_command(command, status, output_buffer, output_buffer_name, error_buffer)
+            implicit none(type, external)
+            character(len=*), intent(in) :: command
+            type(status_type), intent(out) :: status
+            type(handle_type), intent(in), optional :: output_buffer
+            character(len=*), intent(in), optional :: output_buffer_name, error_buffer
+        end subroutine async_shell_command
+
+        !> Sentinel for asynchronous shell commands: the default sentinel,
+        !> then point set in the output buffer after the command (see
+        !> `shell_command_dont_erase_buffer').  Port of
+        !> simple.el:shell-command-sentinel.  (In simple_shell_fm.)
+        recursive module subroutine shell_command_sentinel(process, signal, status)
+            implicit none(type, external)
+            type(handle_type), intent(in) :: process
+            character(len=*), intent(in) :: signal
+            type(status_type), intent(out) :: status
+        end subroutine shell_command_sentinel
+
         !> Register the shell commands.  (In simple_shell_fm.)
         module subroutine syms_of_simple_shell()
             implicit none(type, external)
@@ -547,6 +597,51 @@ module simple_fm
     type(integer_setting), public :: shell_command_dont_erase_buffer = &
                                      integer_setting(name="shell_command_dont_erase_buffer", value=DONT_ERASE_NIL)
 
+    !> Values of `async_shell_command_buffer' (see there).
+    integer, parameter, public :: ASYNC_CONFIRM_KILL_PROCESS = 0, ASYNC_CONFIRM_NEW_BUFFER = 1, ASYNC_NEW_BUFFER = 2, &
+                                  ASYNC_CONFIRM_RENAME_BUFFER = 3, ASYNC_RENAME_BUFFER = 4
+
+    !> What to do when the output buffer is used by another shell command.
+    !> This option specifies how to resolve the conflict where a new
+    !> command wants to direct its output to the buffer whose name is
+    !> stored in `shell_command_buffer_name_async', but that buffer is
+    !> already taken by another running shell command.
+    !>
+    !> The value ASYNC_CONFIRM_KILL_PROCESS is used to ask for
+    !> confirmation before killing the already running process and running
+    !> a new process in the same buffer, ASYNC_CONFIRM_NEW_BUFFER for
+    !> confirmation before running the command in a new buffer with a name
+    !> other than the default buffer name, ASYNC_NEW_BUFFER for doing the
+    !> same without confirmation, ASYNC_CONFIRM_RENAME_BUFFER for
+    !> confirmation before renaming the existing output buffer and running
+    !> a new command in the default buffer, ASYNC_RENAME_BUFFER for doing
+    !> the same without confirmation.  Port of simple.el
+    !> async-shell-command-buffer (ASYNC_CONFIRM_KILL_PROCESS is
+    !> `confirm-kill-process', ASYNC_CONFIRM_NEW_BUFFER `confirm-new-buffer',
+    !> ASYNC_NEW_BUFFER `new-buffer', ASYNC_CONFIRM_RENAME_BUFFER
+    !> `confirm-rename-buffer', ASYNC_RENAME_BUFFER `rename-buffer').
+    type(integer_setting), public :: async_shell_command_buffer = &
+                                     integer_setting(name="async_shell_command_buffer", value=ASYNC_CONFIRM_NEW_BUFFER)
+
+    !> Whether to display the command buffer immediately.
+    !> If true, display the buffer immediately; if false, wait until there
+    !> is output.  Port of simple.el async-shell-command-display-buffer.
+    type(logical_setting), public :: async_shell_command_display_buffer = &
+                                     logical_setting(name="async_shell_command_display_buffer", value=.true.)
+
+    !> Number of display columns available for asynchronous shell command
+    !> output.  If negative, use the shell default number (usually 80
+    !> columns).  If a natural number, tell the shell to use that number
+    !> of columns for command output.  Port of simple.el
+    !> async-shell-command-width (a negative value for nil).
+    type(integer_setting), public :: async_shell_command_width = &
+                                     integer_setting(name="async_shell_command_width", value=-1)
+
+    !> Major mode to use for the output of asynchronous `shell_command'.
+    !> Port of simple.el async-shell-command-mode (`shell_command_mode'
+    !> when it is null).
+    type(function_setting), public :: async_shell_command_mode = function_setting(name="async_shell_command_mode")
+
     !> Keymap used for completing shell commands in minibuffer.  Port of
     !> simple.el minibuffer-local-shell-command-map (without its
     !> completion keys).
@@ -567,6 +662,166 @@ module simple_fm
         logical function predicate_proc()
             implicit none(type, external)
         end function predicate_proc
+    end interface
+
+    abstract interface
+        !> A `next_error_function': move by N errors (back for a negative
+        !> N), going back to the beginning of the errors first if RESET,
+        !> and visit the source of the error.
+        recursive subroutine next_error_function_proc(n, reset, status)
+            import :: int64, status_type
+            implicit none(type, external)
+            integer(int64), intent(in) :: n
+            logical, intent(in) :: reset
+            type(status_type), intent(out) :: status
+        end subroutine next_error_function_proc
+    end interface
+
+    public :: next_error_function_proc
+
+    !> The most recent `next_error' buffer.
+    !> A buffer becomes most recent when its compilation, grep, or similar
+    !> mode is started, or when it is used with \[next_error] or
+    !> \[compile_goto_error].  Port of simple.el next-error-last-buffer.
+    type(handle_type), public :: next_error_last_buffer
+
+    !> List of hook functions run by `next_error' after visiting source
+    !> file.  Port of simple.el next-error-hook.
+    type(hook_type), target, public :: next_error_hook = hook_type(name="next_error_hook")
+
+    !> If true, `next_error' always outputs the current error buffer.
+    !> If false, the message is output only when the error buffer changes.
+    !> Port of simple.el next-error-verbose.
+    type(logical_setting), public :: next_error_verbose = logical_setting(name="next_error_verbose", value=.true.)
+
+    ! next-error, in submodule simple_next_error_fm.
+    interface
+        !> Give the current buffer its own `next_error_function': the
+        !> function to use to find the next error in the current buffer.
+        !> The function is called with 2 parameters:
+        !> N is an integer specifying by how many errors to move.
+        !> RESET is a logical which, if true, says to go back to the
+        !> beginning of the errors before moving.
+        !> Major modes providing compile-like functionality should set this
+        !> variable to indicate to `next_error' that this is a candidate
+        !> buffer and how to navigate in it.  Port of the setq-local of
+        !> simple.el next-error-function.  (In simple_next_error_fm.)
+        module subroutine set_next_error_function(fn)
+            implicit none(type, external)
+            procedure(next_error_function_proc) :: fn
+        end subroutine set_next_error_function
+
+        !> Whether buffer slot BI has a `next_error_function'.
+        module logical function has_next_error_function(bi)
+            implicit none(type, external)
+            integer(int64), intent(in) :: bi
+        end function has_next_error_function
+
+        !> Return true if BUFFER is a `next_error' capable buffer.
+        !> If AVOID_CURRENT is true, and BUFFER is the current buffer,
+        !> return false.
+        !>
+        !> The function EXTRA_TEST_INCLUSIVE, if present, is called if
+        !> BUFFER would not normally qualify.  If it returns true, BUFFER
+        !> is considered `next_error' capable, anyway, and the function
+        !> returns true.
+        !>
+        !> The function EXTRA_TEST_EXCLUSIVE, if present, is called if the
+        !> buffer would normally qualify.  If it returns false, BUFFER is
+        !> rejected, and the function returns false.  Port of
+        !> simple.el:next-error-buffer-p.  (In simple_next_error_fm.)
+        recursive module logical function next_error_buffer_p(buffer, avoid_current, extra_test_inclusive, &
+                                                              extra_test_exclusive)
+            implicit none(type, external)
+            type(handle_type), intent(in) :: buffer
+            logical, intent(in), optional :: avoid_current
+            procedure(predicate_proc), optional :: extra_test_inclusive, extra_test_exclusive
+        end function next_error_buffer_p
+
+        !> Return a `next_error' capable buffer in BUFFER.
+        !>
+        !> If AVOID_CURRENT is true, treat the current buffer as an
+        !> absolute last resort only.
+        !>
+        !> The function EXTRA_TEST_INCLUSIVE, if present, is called in each
+        !> buffer that normally would not qualify.  If it returns true, the
+        !> buffer in question is treated as usable.
+        !>
+        !> The function EXTRA_TEST_EXCLUSIVE, if present, is called in each
+        !> buffer that would normally be considered usable.  If it returns
+        !> false, that buffer is rejected.  Port of
+        !> simple.el:next-error-find-buffer.  (In simple_next_error_fm.)
+        recursive module subroutine next_error_find_buffer(buffer, status, avoid_current, extra_test_inclusive, &
+                                                           extra_test_exclusive)
+            implicit none(type, external)
+            type(handle_type), intent(out) :: buffer
+            type(status_type), intent(out) :: status
+            logical, intent(in), optional :: avoid_current
+            procedure(predicate_proc), optional :: extra_test_inclusive, extra_test_exclusive
+        end subroutine next_error_find_buffer
+
+        !> Visit next `next_error' message and corresponding source code.
+        !>
+        !> If all the error messages parsed so far have been processed
+        !> already, the message buffer is checked for new ones.
+        !>
+        !> N specifies how many error messages to move; negative means move
+        !> back to previous error messages.  Just \[universal_argument] as
+        !> a prefix means reparse the error message buffer and start at the
+        !> first error.
+        !>
+        !> The RESET argument specifies that we should restart from the
+        !> beginning.
+        !>
+        !> \[next_error] normally uses the most recently started
+        !> compilation, grep, or occur buffer.  It can also operate on any
+        !> buffer with output from the \[compile], \[grep] commands, or,
+        !> more generally, on any buffer in Compilation mode or with
+        !> Compilation Minor mode enabled, or any buffer in which
+        !> `next_error_function' is bound to an appropriate function.  To
+        !> specify use of a particular buffer for error messages, type
+        !> \[next_error] in that buffer.
+        !>
+        !> Once \[next_error] has chosen the buffer for error messages, it
+        !> runs `next_error_hook' with `run_hooks', and stays with that
+        !> buffer until you use it in some other buffer that uses
+        !> Compilation mode or Compilation Minor mode.
+        !>
+        !> To control which errors are matched, customize the variable
+        !> `compilation_error_regexp_alist'.  The rules there determine the
+        !> boundaries between error messages.  In general, messages that
+        !> share the same line and column numbers are considered parts of a
+        !> single error message.  Port of simple.el:next-error.  (In
+        !> simple_next_error_fm.)
+        recursive module subroutine next_error(status, n, reset)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+            integer(int64), intent(in), optional :: n
+            logical, intent(in), optional :: reset
+        end subroutine next_error
+
+        !> Visit the source code corresponding to the `next_error' message
+        !> at point.  Port of simple.el:next-error-internal.  (In
+        !> simple_next_error_fm.)
+        recursive module subroutine next_error_internal(status)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+        end subroutine next_error_internal
+
+        !> Function to call when the next locus is found and displayed.
+        !> FROM_BUFFER is a buffer from which `next_error' navigated, and
+        !> TO_BUFFER is a target buffer.  Port of simple.el:next-error-found.
+        !> (In simple_next_error_fm.)
+        recursive module subroutine next_error_found(status, from_buffer, to_buffer)
+            implicit none(type, external)
+            type(status_type), intent(out) :: status
+            type(handle_type), intent(in), optional :: from_buffer, to_buffer
+        end subroutine next_error_found
+
+        !> Register the next-error commands.  (In simple_next_error_fm.)
+        module subroutine syms_of_simple_next_error()
+            implicit none(type, external)
+        end subroutine syms_of_simple_next_error
     end interface
 
     !> Time in seconds to delay after showing the other end of the region.
@@ -1859,6 +2114,7 @@ contains
         call syms_of_simple_fill()
         call syms_of_simple_modes()
         call syms_of_simple_shell()
+        call syms_of_simple_next_error()
         cycle_spacing_actions = [cycle_spacing_action_type(CYCLE_JUST_ONE_SPACE), &
                                  cycle_spacing_action_type(CYCLE_DELETE_ALL_SPACE), &
                                  cycle_spacing_action_type(CYCLE_RESTORE)]

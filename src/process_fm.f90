@@ -49,8 +49,8 @@
 !> `process_environment' (the editor's environment is passed); remote
 !> directories and file name handlers; stopped processes (`stop_process',
 !> `continue_process', `stop' statuses); `set_process_filter' with t
-!> (stopping output); a CURRENT_GROUP argument of the signalling
-!> functions (signals go to the process's own group); `signal_process'
+!> (stopping output); a CURRENT_GROUP of `lambda' (signal only when the
+!> shell does not own the terminal); `signal_process'
 !> with names, `interrupt_process_functions', `signal_process_functions';
 !> the process plist (`process_get', `process_put'); threads locking
 !> processes (`set_process_thread'); `set_process_window_size';
@@ -68,7 +68,7 @@ module process_fm
     use handle_fm, only: handle_type, slot_table_type, null_handle
     use data_fm, only: logical_setting
     use buffer_fm, only: buffers, cur, current_buffer, set_buffer, set_buffer_internal, buffer_live_p, &
-                         resolve_buffer, kill_buffer_processes_hook, vdeactivate_mark, BEG
+                         resolve_buffer, kill_buffer_processes_hook, vdeactivate_mark, BEG, buffer_handle
     use marker_fm, only: make_marker, free_marker, marker_buffer, marker_position, set_marker_both, &
                          set_marker, char_to_byte
     use insdel_fm, only: insert, insert_before_markers
@@ -80,7 +80,7 @@ module process_fm
                          close_fd, emacs_strsignal, emacs_strerror, emacs_dup_cloexec, emacs_num_processors, ENOENT, EPIPE
     use sys_worker_fm, only: worker_message_type, start_reader, take_worker_messages, worker_wake_fd, &
                              wait_for_worker_messages, worker_count, WORKER_OUTPUT, WORKER_EXIT
-    use xdisp_fm, only: message
+    use xdisp_fm, only: message, mode_line_process_status
     use keyboard_fm, only: process_output_hook, process_wake_fd
     use commands_fm, only: commands
     implicit none(type, external)
@@ -91,6 +91,7 @@ module process_fm
               get_process, get_buffer_process, process_list, process_status, process_exit_status, process_id, &
               process_name, process_command, process_buffer, set_process_buffer, process_mark, &
               set_process_filter, set_process_sentinel, process_tty_name, set_process_query_on_exit_flag, &
+              process_filter, process_sentinel, &
               process_query_on_exit_flag, interrupt_process, kill_process, quit_process, signal_process, &
               process_send_string, process_send_region, process_send_eof, accept_process_output, &
               internal_default_process_filter, internal_default_process_sentinel, kill_buffer_processes, &
@@ -572,6 +573,32 @@ contains
             procs(i)%filter => null()
         end if
     end subroutine set_process_filter
+
+    !> FILTER is the filter function of PROCESS (null for the default,
+    !> `internal_default_process_filter').  Port of
+    !> process.c:Fprocess_filter.
+    subroutine process_filter(process, filter)
+        type(handle_type), intent(in) :: process
+        procedure(process_filter_proc), pointer, intent(out) :: filter
+        type(status_type) :: st
+        integer(int64) :: i
+        filter => null()
+        call resolve(process, i, st)
+        if (st%ok()) filter => procs(i)%filter
+    end subroutine process_filter
+
+    !> SENTINEL is the sentinel of PROCESS (null for the default,
+    !> `internal_default_process_sentinel').  Port of
+    !> process.c:Fprocess_sentinel.
+    subroutine process_sentinel(process, sentinel)
+        type(handle_type), intent(in) :: process
+        procedure(process_sentinel_proc), pointer, intent(out) :: sentinel
+        type(status_type) :: st
+        integer(int64) :: i
+        sentinel => null()
+        call resolve(process, i, st)
+        if (st%ok()) sentinel => procs(i)%sentinel
+    end subroutine process_sentinel
 
     !> Give PROCESS the sentinel SENTINEL; absent for default.
     !> The sentinel is called as a function when the process changes state.
@@ -1301,49 +1328,89 @@ contains
     end subroutine get_process_arg
 
     !> Send signal `signo' to the process group of process `i' (if it has
-    !> not been reaped).  Port of process.c:process_send_signal (with a
-    !> nil CURRENT-GROUP).
-    subroutine process_send_signal(i, signo, status)
+    !> not been reaped).  With CURRENT_GROUP (only for a pty), send it to
+    !> the terminal's current process group instead: SIGINT and SIGQUIT by
+    !> "typing" the terminal's INTR or QUIT character on the pty
+    !> (SIGNALS_VIA_CHARACTERS), other signals to the terminal's foreground
+    !> group.  Port of process.c:process_send_signal.
+    subroutine process_send_signal(i, signo, status, current_group)
+        use sysdep_fm, only: emacs_get_tty_pgrp, emacs_tty_signal_char
         integer(int64), intent(in) :: i
         integer, intent(in) :: signo
         type(status_type), intent(out) :: status
+        logical, intent(in), optional :: current_group
+        logical :: group
+        integer(int32) :: gid, err
+        integer :: c
         status = status_type()
         if (.not. procs(i)%reading) then
             call set_error(status, FM_GENERIC_ERROR, "Process "//procs(i)%name//" is not active")
             return
         end if
-        ! Do not kill an already-reaped process.
-        if (procs(i)%alive) call emacs_kill_group(i, signo)
+        group = .false.
+        if (present(current_group)) group = current_group
+        if (.not. procs(i)%pty) group = .false.
+        ! Send the signal to the shell's process group.
+        gid = procs(i)%pid
+        if (group .and. procs(i)%outfd >= 0) then
+            ! If possible, send signals to the entire pgrp by sending an
+            ! input character to it.
+            c = emacs_tty_signal_char(procs(i)%outfd, signo)
+            if (c >= 0) then
+                call send_process(i, achar(c), status)
+                return
+            end if
+            ! Get the current pgrp using the tty itself.
+            gid = emacs_get_tty_pgrp(procs(i)%outfd)
+            ! If we can't get the information, assume the shell owns the
+            ! tty.
+            if (gid == -1) gid = procs(i)%pid
+        end if
+        ! Do not kill an already-reaped process, as that could kill an
+        ! innocent bystander that happens to have the same process ID.
+        if (procs(i)%alive .and. gid > 0) err = emacs_kill(-gid, int(signo, int32))
     end subroutine process_send_signal
 
     !> Interrupt process PROCESS.
     !> PROCESS may be a process, or absent for the current buffer's
-    !> process.  Port of process.c:Finterrupt_process (through
-    !> internal-default-interrupt-process).
-    subroutine interrupt_process(status, process)
+    !> process.
+    !> Second arg CURRENT_GROUP true means send signal to
+    !> the current process-group of the process's controlling terminal
+    !> rather than to the process's own process group.
+    !> If the process is a shell, this means interrupt current subjob
+    !> rather than the shell.  Port of process.c:Finterrupt_process
+    !> (through internal-default-interrupt-process).
+    subroutine interrupt_process(status, process, current_group)
         type(status_type), intent(out) :: status
         type(handle_type), intent(in), optional :: process
+        logical, intent(in), optional :: current_group
         integer(int64) :: i
         call get_process_arg(i, status, process)
-        if (status%ok()) call process_send_signal(i, 2, status)
+        if (status%ok()) call process_send_signal(i, 2, status, current_group)
     end subroutine interrupt_process
 
-    !> Kill process PROCESS.  Port of process.c:Fkill_process.
-    subroutine kill_process(status, process)
+    !> Kill process PROCESS.  May be process or name of one.
+    !> See function `interrupt_process' for more details on usage.  Port
+    !> of process.c:Fkill_process.
+    subroutine kill_process(status, process, current_group)
         type(status_type), intent(out) :: status
         type(handle_type), intent(in), optional :: process
+        logical, intent(in), optional :: current_group
         integer(int64) :: i
         call get_process_arg(i, status, process)
-        if (status%ok()) call process_send_signal(i, 9, status)
+        if (status%ok()) call process_send_signal(i, 9, status, current_group)
     end subroutine kill_process
 
-    !> Send QUIT signal to process PROCESS.  Port of process.c:Fquit_process.
-    subroutine quit_process(status, process)
+    !> Send QUIT signal to process PROCESS.  May be process or name of one.
+    !> See function `interrupt_process' for more details on usage.  Port
+    !> of process.c:Fquit_process.
+    subroutine quit_process(status, process, current_group)
         type(status_type), intent(out) :: status
         type(handle_type), intent(in), optional :: process
+        logical, intent(in), optional :: current_group
         integer(int64) :: i
         call get_process_arg(i, status, process)
-        if (status%ok()) call process_send_signal(i, 3, status)
+        if (status%ok()) call process_send_signal(i, 3, status, current_group)
     end subroutine quit_process
 
     !> Send PROCESS the signal with code SIGCODE.  `result' is kill's
@@ -1497,7 +1564,22 @@ contains
         call init_callproc()
         commands%delete_process%run => cmd_delete_process
         kill_buffer_processes_hook => kill_buffer_processes
+        mode_line_process_status => mode_line_status
     end subroutine syms_of_process
+
+    !> What %s in a mode line shows for buffer slot BI: the status of its
+    !> process, or "no process".  The %s case of xdisp.c:decode_mode_spec.
+    subroutine mode_line_status(bi, status_name)
+        integer(int64), intent(in) :: bi
+        character(len=:), allocatable, intent(out) :: status_name
+        type(handle_type) :: proc
+        proc = get_buffer_process(buffer_handle(bi))
+        if (proc%index == 0) then
+            status_name = "no process"
+        else
+            status_name = process_status(proc)
+        end if
+    end subroutine mode_line_status
 
     !> Kill every process still running with `sig' (SIGKILL if absent),
     !> and wait for the workers to finish (for exiting, and for tests).

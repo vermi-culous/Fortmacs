@@ -90,7 +90,8 @@ module font_lock_fm
               font_lock_flush, font_lock_ensure, font_lock_update, font_lock_default_fontify_region, &
               font_lock_default_unfontify_region, font_lock_fontify_keywords_region, font_lock_after_change_function, &
               font_lock_add_keywords, font_lock_refresh_defaults, font_lock_prepend_text_property, &
-              font_lock_append_text_property, font_lock_fillin_text_property, font_lock_keyword, font_lock_highlight, &
+              font_lock_append_text_property, font_lock_fillin_text_property, &
+              font_lock_remove_face_from_text_property, font_lock_keyword, font_lock_highlight, &
               font_lock_anchored, font_lock_fontified, font_lock_keywords_of_buffer
 
     !> `font_lock_maximum_decoration' for the maximum decoration available
@@ -1287,6 +1288,74 @@ contains
             call text_property_any(next, end, prop, nil(), start, found, status)
         end do
     end subroutine font_lock_fillin_text_property
+
+    !> Remove a specific property value from text from START to END.
+    !> Arguments PROP and VALUE specify the property and value to remove.
+    !> The resulting property values are not `eq' to VALUE nor arrays
+    !> containing VALUE.  Port of
+    !> font-lock.el:font-lock--remove-face-from-text-property (in the
+    !> current buffer).
+    subroutine font_lock_remove_face_from_text_property(start_in, end, prop, value, status)
+        use textprop_fm, only: text_property_not_all, remove_list_of_text_properties
+        integer(int64), intent(in) :: start_in, end
+        type(value_type), intent(in) :: prop, value
+        type(status_type), intent(out) :: status
+        type(value_type), allocatable :: elts(:), kept(:)
+        type(value_type) :: prev
+        integer(int64) :: start, next
+        logical :: found, changed, member, atom
+        integer :: i, n
+        call text_property_not_all(start_in, end, prop, nil(), start, found, status)
+        do while (found .and. status%ok())
+            call next_single_property_change(start, prop, next, found, status, end)
+            if (.not. status%ok()) return
+            if (.not. found) next = end
+            call get_text_property(start, prop, prev, status)
+            atom = .not. consp(prev)
+            if (.not. atom) atom = keyword_head(prev) .or. color_head(prev)
+            if (atom) then
+                if (value_eq(value, prev)) call remove_list_of_text_properties(start, next, list(prop), changed, status)
+            else
+                call list_elements(prev, elts)
+                member = .false.
+                n = 0
+                allocate (kept(size(elts)))
+                do i = 1, size(elts)
+                    if (value_eq(elts(i), value)) then
+                        member = .true.
+                    else
+                        n = n + 1
+                        kept(n) = elts(i)
+                    end if
+                end do
+                if (member) then
+                    if (n == 0) then
+                        call remove_list_of_text_properties(start, next, list(prop), changed, status)
+                    else if (n == 1) then
+                        call put_text_property(start, next, prop, kept(1), status)
+                    else
+                        call put_text_property(start, next, prop, make_list(kept(1:n)), status)
+                    end if
+                end if
+                deallocate (kept)
+            end if
+            if (.not. status%ok()) return
+            call text_property_not_all(next, end, prop, nil(), start, found, status)
+        end do
+    contains
+
+        !> Whether V starts with `foreground_color' or `background_color'.
+        logical function color_head(v)
+            type(value_type), intent(in) :: v
+            type(value_type), allocatable :: e(:)
+            color_head = .false.
+            call list_elements(v, e)
+            if (size(e) == 0) return
+            if (.not. symbolp(e(1))) return
+            color_head = symbols(xsymbol(e(1)))%name == "foreground_color" .or. &
+                         symbols(xsymbol(e(1)))%name == "background_color"
+        end function color_head
+    end subroutine font_lock_remove_face_from_text_property
 
     ! ------------------------------------------------------------------
     ! Keyword regexp fontification functions

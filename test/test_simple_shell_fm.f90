@@ -58,7 +58,8 @@ contains
                     new_unittest("shell-command-insert-here", test_insert_here), &
                     new_unittest("shell-command-on-region-replace", test_replace), &
                     new_unittest("shell-command-error-buffer", test_error_buffer), &
-                    new_unittest("shell-command-async-deferred", test_async), &
+                    new_unittest("simple-tests-async-shell-command-30280", test_async_30280), &
+                    new_unittest("shell-command-async", test_async), &
                     new_unittest("shell-command-keys", test_keys) &
                     ]
     end subroutine collect_simple_shell_fm
@@ -282,11 +283,125 @@ contains
         call kill_buffer(h, st)
     end subroutine test_error_buffer
 
-    subroutine test_async(error)
-        type(error_type), allocatable, intent(out) :: error
+    !> The size of BUFFER.
+    integer(int64) function size_of(buffer)
+        use editfns_fm, only: buffer_size_of
+        type(handle_type), intent(in) :: buffer
         type(status_type) :: st
-        call shell_command("sleep 1 &", st)
-        call check(error, format_error(st), "Asynchronous shell commands are not supported yet")
+        call buffer_size_of(buffer, size_of, st)
+    end function size_of
+
+    !> Wait (at most a minute) until the process of BUFFER has exited.
+    subroutine wait_process(buffer)
+        use process_fm, only: accept_process_output, get_buffer_process
+        type(handle_type), intent(in) :: buffer
+        type(handle_type) :: proc
+        type(status_type) :: st
+        integer(int64) :: start, now, rate
+        logical :: got
+        call system_clock(start, rate)
+        do
+            if (.not. buffer_live_p(buffer)) exit
+            proc = get_buffer_process(buffer)
+            if (proc%index == 0) exit
+            call system_clock(now)
+            if ((now - start)/max(rate, 1_int64) > 60) exit
+            call accept_process_output(got, st, proc, 1.0)
+        end do
+    end subroutine wait_process
+
+    !> Port of simple-tests.el simple-tests-async-shell-command-30280 (sh
+    !> commands instead of an Emacs in batch mode): with ASYNC_NEW_BUFFER,
+    !> a second command gets a new buffer.
+    subroutine test_async_30280(error)
+        use simple_fm, only: async_shell_command, async_shell_command_buffer, async_shell_command_display_buffer, &
+                             ASYNC_NEW_BUFFER, ASYNC_CONFIRM_NEW_BUFFER
+        use buffer_fm, only: generate_new_buffer_name
+        use process_fm, only: get_buffer_process, delete_process, accept_process_output
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: buffer, proc, h, win
+        type(status_type) :: st
+        character(len=:), allocatable :: first, second
+        integer(int64) :: start, now, rate
+        logical :: got
+        integer :: k
+        call init_bindings()
+        call fresh("*shell-test*", h)
+        async_shell_command_buffer = ASYNC_NEW_BUFFER
+        async_shell_command_display_buffer = .false.
+        first = generate_new_buffer_name("name")
+        ! One command has no output, the other does.
+        call async_shell_command("sleep 8", st, output_buffer_name=first)
+        call check(error, st%ok(), format_error(st))
+        if (allocated(error)) return
+        second = generate_new_buffer_name("name")
+        call async_shell_command("echo hello", st, output_buffer_name=first)
+        call check(error, st%ok(), format_error(st))
+        if (allocated(error)) return
+        ! First command should neither have nor display output.
+        buffer = get_buffer(first)
+        call check(error, buffer_live_p(buffer), "first buffer")
+        if (allocated(error)) return
+        proc = get_buffer_process(buffer)
+        call check(error, proc%index /= 0, "first process")
+        if (.not. allocated(error)) call check(error, size_of(buffer) == 0, "first output")
+        win = get_buffer_window(buffer)
+        if (.not. allocated(error)) call check(error, win%index == 0, "first window")
+        if (allocated(error)) return
+        ! Second command should both have and display output.
+        buffer = get_buffer(second)
+        call check(error, buffer_live_p(buffer), "second buffer "//second)
+        if (allocated(error)) return
+        call system_clock(start, rate)
+        do
+            if (size_of(buffer) > 0) exit
+            proc = get_buffer_process(buffer)
+            if (proc%index == 0) exit
+            call system_clock(now)
+            if ((now - start)/max(rate, 1_int64) > 60) exit
+            call accept_process_output(got, st, proc, 1.0)
+        end do
+        call check(error, size_of(buffer) > 0, "second output")
+        win = get_buffer_window(buffer)
+        if (.not. allocated(error)) call check(error, win%index /= 0, "second window")
+        do k = 1, 2
+            if (k == 1) buffer = get_buffer(first)
+            if (k == 2) buffer = get_buffer(second)
+            if (.not. buffer_live_p(buffer)) cycle
+            proc = get_buffer_process(buffer)
+            if (proc%index /= 0) call delete_process(proc, st)
+            call kill_buffer(buffer, st)
+        end do
+        async_shell_command_buffer = ASYNC_CONFIRM_NEW_BUFFER
+        async_shell_command_display_buffer = .true.
+        call kill_buffer(h, st)
+    end subroutine test_async_30280
+
+    !> A trailing & runs the command asynchronously in *Async Shell
+    !> Command*, in Shell Command mode, with "Shell" as its process.
+    subroutine test_async(error)
+        use process_fm, only: get_buffer_process
+        type(error_type), allocatable, intent(out) :: error
+        type(handle_type) :: h, buffer
+        type(status_type) :: st
+        character(len=:), allocatable :: text
+        call init_bindings()
+        call fresh("*shell-test*", h)
+        last_message = ""
+        call shell_command("echo async &", st)
+        call check(error, st%ok(), format_error(st))
+        if (allocated(error)) return
+        buffer = get_buffer("*Async Shell Command*")
+        call check(error, buffer_live_p(buffer), "output buffer")
+        if (allocated(error)) return
+        call wait_process(buffer)
+        call set_buffer(buffer, st)
+        call check(error, buffers(cur)%major_mode, "shell_command_mode")
+        text = buffer_string()
+        if (.not. allocated(error)) call check(error, index(text, "async") == 1, text)
+        if (.not. allocated(error)) call check(error, last_message, "echo async: finished.")
+        call kill_buffer(buffer, st)
+        call kill_buffer(h, st)
     end subroutine test_async
 
     !> M-! and C-u M-| through the command loop.

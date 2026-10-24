@@ -274,7 +274,50 @@ module fortmacs
                           compilation_always_kill, compilation_disable_input, compilation_scroll_output, &
                           COMPILATION_SCROLL_NIL, COMPILATION_SCROLL_T, COMPILATION_SCROLL_FIRST_ERROR, &
                           compilation_filter_hook, compilation_filter_start, compilation_mode_hook, &
-                          compilation_mode_map, compilation_directory, comint_inhibit_carriage_motion
+                          compilation_mode_map, compilation_directory
+    use compile_fm, only: compilation_rule_type, compilation_highlight_type, compilation_directory_matcher_type, &
+                          compilation_transform_type, compilation_number_function, compilation_file_function, &
+                          compilation_face_function, compilation_minor_mode_hook, compilation_shell_minor_mode_hook, &
+                          compilation_minor_mode_map, compilation_shell_minor_mode_map, &
+                          compilation_error_regexp_alist_alist, compilation_error_regexp_alist, &
+                          compilation_error_case_fold_search, compilation_directory_matcher, &
+                          compilation_transform_file_match_alist, compilation_error_screen_columns, &
+                          compilation_first_column, compilation_skip_threshold, compilation_skip_visited, &
+                          compilation_skip_to_next_location, compilation_search_all_directories, &
+                          compilation_context_lines, COMPILATION_CONTEXT_NIL, COMPILATION_CONTEXT_T, &
+                          compilation_message_face, compilation_error_face, compilation_warning_face, &
+                          compilation_info_face, compilation_line_face, compilation_column_face, &
+                          compilation_enter_directory_face, compilation_leave_directory_face, compilation_error, &
+                          compilation_warning, compilation_info, compilation_mode_line_fail, compilation_mode_line_run, &
+                          compilation_mode_line_exit, compilation_line_number, compilation_column_number, &
+                          compilation_minor_mode, compilation_shell_minor_mode, compile_goto_error, &
+                          compilation_next_error, compilation_previous_error, compilation_next_file, &
+                          compilation_previous_file
+    use comint_fm, only: comint_inhibit_carriage_motion, comint_mode, make_comint, make_comint_in_buffer, comint_run, &
+                         comint_exec, comint_send_input, comint_send_string, comint_prompt_regexp, &
+                         comint_prompt_read_only, comint_highlight_input, comint_input_ignoredups, &
+                         comint_input_ring_file_name, comint_pager, comint_input_ring_file_prefix, &
+                         comint_move_point_for_output, comint_move_point_for_matching_input, COMINT_MOVE_NIL, &
+                         COMINT_MOVE_T, COMINT_MOVE_ALL, COMINT_MOVE_THIS, COMINT_MOVE_OTHERS, &
+                         COMINT_MATCHING_AFTER_INPUT, COMINT_MATCHING_END_OF_LINE, comint_scroll_show_maximum_output, &
+                         comint_buffer_maximum_size, comint_input_ring_size, comint_input_ring_separator, &
+                         comint_input_history_ignore, comint_process_echoes, comint_eol_on_send, &
+                         comint_use_prompt_regexp, comint_terminfo_terminal, comint_delimiter_argument_list, &
+                         comint_mode_hook, comint_exec_hook, comint_output_filter_functions, &
+                         comint_preoutput_filter_functions, comint_input_filter_functions, comint_mode_map, &
+                         comint_highlight_input_face, comint_highlight_prompt, comint_truncate_buffer, &
+                         comint_strip_ctrl_m, comint_postoutput_scroll_to_bottom, comint_show_maximum_output
+    use shell_fm, only: shell, shell_mode, shell_dumb_shell_regexp, shell_prompt_pattern, shell_delimiter_argument_list, &
+                        shell_command_regexp, shell_command_separator_regexp, shell_popd_regexp, shell_pushd_regexp, &
+                        shell_pushd_tohome, shell_pushd_dextract, shell_pushd_dunique, shell_cd_regexp, &
+                        shell_dirtrack_verbose, explicit_shell_file_name, explicit_csh_args, explicit_bash_args, &
+                        shell_has_auto_cd, shell_get_old_input_include_continuation_lines, shell_kill_buffer_on_exit, &
+                        shell_history_file_name, shell_dirstack_query, shell_mode_hook, shell_command_mode_hook, &
+                        shell_dirtrack_mode_hook, shell_mode_map, shell_command_mode_map, shell_dirtrack_mode
+    use simple_fm, only: async_shell_command, async_shell_command_buffer, async_shell_command_display_buffer, &
+                         async_shell_command_width, async_shell_command_mode, ASYNC_CONFIRM_KILL_PROCESS, &
+                         ASYNC_CONFIRM_NEW_BUFFER, ASYNC_NEW_BUFFER, ASYNC_CONFIRM_RENAME_BUFFER, ASYNC_RENAME_BUFFER, &
+                         next_error, next_error_hook, next_error_verbose, next_error_last_buffer
     use callproc_fm, only: shell_file_name
     use simple_fm, only: shell_command, shell_command_on_region, read_shell_command, display_message_or_buffer, &
                          shell_command_switch, shell_command_default_error_buffer, shell_command_prompt_show_cwd, &
@@ -301,6 +344,44 @@ module fortmacs
               compilation_scroll_output, COMPILATION_SCROLL_NIL, COMPILATION_SCROLL_T, COMPILATION_SCROLL_FIRST_ERROR, &
               compilation_filter_hook, compilation_filter_start, compilation_mode_hook, compilation_mode_map, &
               compilation_directory, comint_inhibit_carriage_motion
+    public :: compilation_rule_type, compilation_highlight_type, compilation_directory_matcher_type, &
+              compilation_transform_type, compilation_number_function, compilation_file_function, &
+              compilation_face_function, compilation_minor_mode_hook, compilation_shell_minor_mode_hook, &
+              compilation_minor_mode_map, compilation_shell_minor_mode_map, compilation_error_regexp_alist_alist, &
+              compilation_error_regexp_alist, compilation_error_case_fold_search, compilation_directory_matcher, &
+              compilation_transform_file_match_alist, compilation_error_screen_columns, compilation_first_column, &
+              compilation_skip_threshold, compilation_skip_visited, compilation_skip_to_next_location, &
+              compilation_search_all_directories, compilation_context_lines, COMPILATION_CONTEXT_NIL, &
+              COMPILATION_CONTEXT_T, compilation_message_face, compilation_error_face, compilation_warning_face, &
+              compilation_info_face, compilation_line_face, compilation_column_face, compilation_enter_directory_face, &
+              compilation_leave_directory_face, compilation_error, compilation_warning, compilation_info, &
+              compilation_mode_line_fail, compilation_mode_line_run, compilation_mode_line_exit, &
+              compilation_line_number, compilation_column_number, compilation_minor_mode, &
+              compilation_shell_minor_mode, compile_goto_error, compilation_next_error, compilation_previous_error, &
+              compilation_next_file, compilation_previous_file
+    public :: comint_mode, make_comint, make_comint_in_buffer, comint_run, comint_exec, comint_send_input, &
+              comint_send_string, comint_prompt_regexp, comint_prompt_read_only, comint_highlight_input, &
+              comint_input_ignoredups, comint_input_ring_file_name, comint_pager, comint_input_ring_file_prefix, &
+              comint_move_point_for_output, comint_move_point_for_matching_input, COMINT_MOVE_NIL, COMINT_MOVE_T, &
+              COMINT_MOVE_ALL, COMINT_MOVE_THIS, COMINT_MOVE_OTHERS, COMINT_MATCHING_AFTER_INPUT, &
+              COMINT_MATCHING_END_OF_LINE, comint_scroll_show_maximum_output, comint_buffer_maximum_size, &
+              comint_input_ring_size, comint_input_ring_separator, comint_input_history_ignore, comint_process_echoes, &
+              comint_eol_on_send, comint_use_prompt_regexp, comint_terminfo_terminal, comint_delimiter_argument_list, &
+              comint_mode_hook, comint_exec_hook, comint_output_filter_functions, comint_preoutput_filter_functions, &
+              comint_input_filter_functions, comint_mode_map, comint_highlight_input_face, comint_highlight_prompt, &
+              comint_truncate_buffer, comint_strip_ctrl_m, comint_postoutput_scroll_to_bottom, &
+              comint_show_maximum_output
+    public :: shell, shell_mode, shell_dumb_shell_regexp, shell_prompt_pattern, shell_delimiter_argument_list, &
+              shell_command_regexp, shell_command_separator_regexp, shell_popd_regexp, shell_pushd_regexp, &
+              shell_pushd_tohome, shell_pushd_dextract, shell_pushd_dunique, shell_cd_regexp, shell_dirtrack_verbose, &
+              explicit_shell_file_name, explicit_csh_args, explicit_bash_args, shell_has_auto_cd, &
+              shell_get_old_input_include_continuation_lines, shell_kill_buffer_on_exit, shell_history_file_name, &
+              shell_dirstack_query, shell_mode_hook, shell_command_mode_hook, shell_dirtrack_mode_hook, shell_mode_map, &
+              shell_command_mode_map, shell_dirtrack_mode
+    public :: async_shell_command, async_shell_command_buffer, async_shell_command_display_buffer, &
+              async_shell_command_width, async_shell_command_mode, ASYNC_CONFIRM_KILL_PROCESS, ASYNC_CONFIRM_NEW_BUFFER, &
+              ASYNC_NEW_BUFFER, ASYNC_CONFIRM_RENAME_BUFFER, ASYNC_RENAME_BUFFER, next_error, next_error_hook, &
+              next_error_verbose, next_error_last_buffer
     public :: status_type, set_error, format_error, FM_GENERIC_ERROR
     public :: command_proc, command_type, commands, set_command_disabled
     public :: keymap_global_set, keymap_set, key_valid_p, current_global_map, global_set_key

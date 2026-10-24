@@ -139,6 +139,19 @@ module data_fm
     !> run by `kill_all_local_variables'.
     type(killer_type), allocatable :: killers(:)
 
+    !> A setting of a module above this one forwarded by its name, like
+    !> the built-in table of data_buffer_fm (DEFVAR_LISP and friends).
+    type :: forwarded_ref_type
+        class(setting_type), pointer :: p => null()
+        !> Buffer-local when set (make-variable-buffer-local).
+        logical :: local_if_set = .false.
+    end type forwarded_ref_type
+
+    !> The settings forwarded with `forward_setting'.
+    type(forwarded_ref_type), allocatable :: forwarded(:)
+
+    public :: forward_setting
+
     public :: check_fixnum, check_symbol, check_string, check_list
     public :: value_eq, car, cdr, car_safe, cdr_safe
     public :: symbol_name, keywordp, boundp, symbol_value, set, makunbound
@@ -345,6 +358,38 @@ module data_fm
     end interface
 
 contains
+
+    !> Make the variable named after setting S stand for S, as the
+    !> built-in settings do: its value is S's, `make_local_variable' and
+    !> `set_local' give a buffer its own value of S, swapped in with the
+    !> buffer.  With LOCAL_IF_SET it is buffer-local whenever it is set
+    !> (make-variable-buffer-local).  For the logical, integer and string
+    !> settings of modules this one cannot see (data.c's DEFVAR_*
+    !> forwarding).
+    subroutine forward_setting(s, local_if_set)
+        class(setting_type), intent(inout), target :: s
+        logical, intent(in), optional :: local_if_set
+        type(forwarded_ref_type), allocatable :: grown(:)
+        integer(int64) :: id
+        integer :: k, n
+        if (.not. allocated(forwarded)) allocate (forwarded(0))
+        do k = 1, size(forwarded)
+            if (associated(forwarded(k)%p, s)) return
+        end do
+        n = size(forwarded)
+        allocate (grown(n + 1))
+        do k = 1, n
+            grown(k)%p => forwarded(k)%p
+            grown(k)%local_if_set = forwarded(k)%local_if_set
+        end do
+        grown(n + 1)%p => s
+        if (present(local_if_set)) grown(n + 1)%local_if_set = local_if_set
+        call move_alloc(grown, forwarded)
+        ! Resolve the symbol again.
+        call ensure_obarray()
+        id = xsymbol(sym(trim(s%name)))
+        symbols(id)%fwd = 0
+    end subroutine forward_setting
 
     !> Have `kill_all_local_variables' run FN in the buffer whose local
     !> variables it kills (once, however often it is added): for modules

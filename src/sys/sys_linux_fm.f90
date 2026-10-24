@@ -239,7 +239,7 @@ module sys_linux_fm
               c_strsignal, c_mkostemp, c_opendir, c_readdir, c_closedir, c_symlink, c_localtime_r
     public :: c_statvfs
     public :: c_pthread_create, c_pthread_join, c_pthread_self, c_pthread_mutex_lock, &
-              c_pthread_mutex_unlock, c_pthread_sigmask, c_kill, c_setsid, c_pidfd_open, &
+              c_pthread_mutex_unlock, c_pthread_sigmask, c_kill, c_setsid, c_pidfd_open, c_tcgetpgrp, &
               c_ioctl_int, c_fcntl_int, c_execve, c_sched_getaffinity, c_time, c_environ
     public :: errno, c_string_to_fortran
 
@@ -253,6 +253,13 @@ module sys_linux_fm
             integer(c_int), value :: fd
             type(termios_type), intent(out) :: t
         end function c_tcgetattr
+
+        !> tcgetpgrp(fd): the foreground process group of a terminal.
+        integer(c_int) function c_tcgetpgrp(fd) bind(C, name="tcgetpgrp")
+            import :: c_int
+            implicit none(type, external)
+            integer(c_int), value :: fd
+        end function c_tcgetpgrp
 
         integer(c_int) function c_tcsetattr(fd, action, t) bind(C, name="tcsetattr")
             import :: c_int, termios_type

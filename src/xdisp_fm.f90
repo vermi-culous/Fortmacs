@@ -101,11 +101,13 @@ module xdisp_fm
     use keyboard_fm, only: last_message, minibuffer_message_text, set_minibuffer_message_text
     use lisp_fm, only: value_type, nilp
     use lread_fm, only: sym
-    use data_fm, only: buffer_local_value, integer_setting
+    use data_fm, only: buffer_local_value, integer_setting, add_local_variables_killer
     implicit none(type, external)
     private
 
     public :: add_minor_mode_lighter, mode_line_modes, mode_line_modes_faces
+    public :: set_mode_line_process, clear_mode_line_process, mode_line_process_text, add_mode_line_modes_entry, &
+              mode_line_modes_prefix
     public :: redisplay, init_frame_windows, glyph_width, &
               mode_line_text, layout_window, message, glyph_columns, display_line_rows, display_row_of, &
               mode_line_row, recenter_start, mode_line_percent
@@ -177,6 +179,48 @@ module xdisp_fm
 
     type(lighter_type), allocatable :: lighters(:)
     integer :: n_lighters = 0
+
+    !> One part of a `mode_line_process' construct: TEXT, in which "%s"
+    !> stands for the status of the buffer's process (decode_mode_spec's
+    !> %s) and "%%" for "%", shown in FACE (none if empty).  Upstream
+    !> the parts are the strings and (:propertize STRING face FACE)
+    !> elements of the construct.
+    type, public :: mode_line_part_type
+        character(len=:), allocatable :: text
+        character(len=:), allocatable :: face
+    end type mode_line_part_type
+
+    !> A buffer's own `mode_line_process'.
+    type :: mode_line_process_entry_type
+        integer(int64) :: serial = 0
+        type(mode_line_part_type), allocatable :: parts(:)
+    end type mode_line_process_entry_type
+
+    type(mode_line_process_entry_type), allocatable :: process_entries(:)
+
+    abstract interface
+        !> The status of the process of buffer slot BI, as %s in a mode
+        !> line shows it ("no process" if it has none).
+        subroutine process_status_proc(bi, status_name)
+            import :: int64
+            implicit none(type, external)
+            integer(int64), intent(in) :: bi
+            character(len=:), allocatable, intent(out) :: status_name
+        end subroutine process_status_proc
+    end interface
+
+    !> What %s shows: installed by process_fm (xdisp.c calls
+    !> Fprocess_status); "no process" while it is null.
+    procedure(process_status_proc), pointer, public :: mode_line_process_status => null()
+
+    !> An element (VARIABLE TEXT) of `mode_line_modes', shown before its
+    !> other parts while ACTIVE says VARIABLE is true.
+    type :: modes_entry_type
+        character(len=:), allocatable :: variable, text
+        procedure(lighter_active_proc), pointer, nopass :: active => null()
+    end type modes_entry_type
+
+    type(modes_entry_type), allocatable :: modes_entries(:)
 
     !> The most cells one character can take: a TAB at the largest sane
     !> tab-width (SANE_TAB_WIDTH).
@@ -1256,13 +1300,16 @@ contains
     !> (UUU:), the buffers are local (-) and the frame is F1.  On a
     !> window-system frame (`graphic', display-graphic-p) the front space
     !> is " ", the frame identification "  " (mode-line-frame-control) and
-    !> there are no end dashes.
-    function mode_line_text(name, modified, read_only, position, line, width, modes, graphic) result(s)
+    !> there are no end dashes.  PREFIX is what `mode_line_modes' shows
+    !> before its "(".
+    function mode_line_text(name, modified, read_only, position, line, width, modes, graphic, prefix) result(s)
         character(len=*), intent(in) :: name, position, line
         logical, intent(in) :: modified, read_only
         integer, intent(in) :: width
         character(len=*), intent(in), optional :: modes
         logical, intent(in), optional :: graphic
+        !> The elements of `mode_line_modes' before its "(" (mode_line_modes_prefix).
+        character(len=*), intent(in), optional :: prefix
         character(len=:), allocatable :: s
         character(len=1) :: star, plus
         logical :: gui
@@ -1285,7 +1332,9 @@ contains
         else
             s = "-UUU:"//star//plus//"-"//" F1  "
         end if
-        s = s//pad_chars(name, 12)//"   "//truncate_chars(position, 3)//pad_chars(" L"//line, 6)//"  ("
+        s = s//pad_chars(name, 12)//"   "//truncate_chars(position, 3)//pad_chars(" L"//line, 6)//"  "
+        if (present(prefix)) s = s//prefix
+        s = s//"("
         if (present(modes)) then
             s = s//modes
         else
@@ -1505,6 +1554,140 @@ contains
         if (present(active)) lighters(k)%active => active
     end subroutine add_minor_mode_lighter
 
+    !> The entry of buffer slot BI in `process_entries' (0 for none).
+    integer function process_entry_of(bi) result(k)
+        integer(int64), intent(in) :: bi
+        if (allocated(process_entries) .and. bi > 0) then
+            do k = 1, size(process_entries)
+                if (process_entries(k)%serial == buffers(bi)%serial) return
+            end do
+        end if
+        k = 0
+    end function process_entry_of
+
+    !> Give the current buffer the `mode_line_process' PARTS (setq
+    !> mode-line-process, a buffer-local variable).
+    !>
+    !> Mode line construct for displaying info on process status.
+    !> Normally unallocated in most modes, since there is no process to
+    !> display.  Port of bindings.el mode-line-process.
+    subroutine set_mode_line_process(parts)
+        type(mode_line_part_type), intent(in) :: parts(:)
+        type(mode_line_process_entry_type), allocatable :: grown(:)
+        integer :: k, n
+        if (cur == 0) return
+        if (.not. allocated(process_entries)) allocate (process_entries(0))
+        call add_local_variables_killer(clear_mode_line_process)
+        k = process_entry_of(cur)
+        if (k == 0) then
+            n = size(process_entries)
+            allocate (grown(n + 1))
+            do k = 1, n
+                call move_alloc(process_entries(k)%parts, grown(k)%parts)
+                grown(k)%serial = process_entries(k)%serial
+            end do
+            call move_alloc(grown, process_entries)
+            k = n + 1
+            process_entries(k)%serial = buffers(cur)%serial
+        end if
+        process_entries(k)%parts = parts
+    end subroutine set_mode_line_process
+
+    !> Make the current buffer's `mode_line_process' empty (nil): when its
+    !> local variables are killed, as kill_all_local_variables does.
+    subroutine clear_mode_line_process()
+        integer :: k
+        if (cur == 0) return
+        k = process_entry_of(cur)
+        if (k == 0) return
+        deallocate (process_entries(k)%parts)
+        allocate (process_entries(k)%parts(0))
+    end subroutine clear_mode_line_process
+
+    !> TEXT of a `mode_line_process' part as buffer slot BI's mode line
+    !> shows it: %s is the status of its process, %% a percent sign.
+    function expand_process_part(bi, text) result(s)
+        integer(int64), intent(in) :: bi
+        character(len=*), intent(in) :: text
+        character(len=:), allocatable :: s, status_name
+        integer :: k
+        s = ""
+        k = 1
+        do while (k <= len(text))
+            if (text(k:k) == "%" .and. k < len(text)) then
+                if (text(k + 1:k + 1) == "s") then
+                    if (associated(mode_line_process_status)) then
+                        call mode_line_process_status(bi, status_name)
+                    else
+                        status_name = "no process"
+                    end if
+                    s = s//status_name
+                    k = k + 2
+                    cycle
+                else if (text(k + 1:k + 1) == "%") then
+                    s = s//"%"
+                    k = k + 2
+                    cycle
+                end if
+            end if
+            s = s//text(k:k)
+            k = k + 1
+        end do
+    end function expand_process_part
+
+    !> The text `mode_line_process' adds to buffer slot BI's mode line
+    !> (for tests and for help).
+    function mode_line_process_text(bi) result(s)
+        integer(int64), intent(in) :: bi
+        character(len=:), allocatable :: s
+        integer :: e, i
+        s = ""
+        e = process_entry_of(bi)
+        if (e == 0) return
+        do i = 1, size(process_entries(e)%parts)
+            s = s//expand_process_part(bi, process_entries(e)%parts(i)%text)
+        end do
+    end function mode_line_process_text
+
+    !> Show TEXT in every mode line, before its modes, while ACTIVE tells
+    !> that VARIABLE is true: the element (VARIABLE TEXT) added at the
+    !> front of `mode_line_modes', as compile.el adds
+    !> (compilation-in-progress "[Compiling] ").  Port of the
+    !> mode-line-modes part of an `add-to-list'.
+    subroutine add_mode_line_modes_entry(variable, text, active)
+        character(len=*), intent(in) :: variable, text
+        procedure(lighter_active_proc) :: active
+        type(modes_entry_type), allocatable :: grown(:)
+        integer :: k, n
+        if (.not. allocated(modes_entries)) allocate (modes_entries(0))
+        do k = 1, size(modes_entries)
+            if (modes_entries(k)%variable == variable) return
+        end do
+        n = size(modes_entries)
+        allocate (grown(n + 1))
+        grown(1)%variable = variable
+        grown(1)%text = text
+        grown(1)%active => active
+        do k = 1, n
+            call move_alloc(modes_entries(k)%variable, grown(k + 1)%variable)
+            call move_alloc(modes_entries(k)%text, grown(k + 1)%text)
+            grown(k + 1)%active => modes_entries(k)%active
+        end do
+        call move_alloc(grown, modes_entries)
+    end subroutine add_mode_line_modes_entry
+
+    !> The text the active entries of `mode_line_modes' added with
+    !> `add_mode_line_modes_entry' show before its "(".
+    function mode_line_modes_prefix() result(s)
+        character(len=:), allocatable :: s
+        integer :: k
+        s = ""
+        if (.not. allocated(modes_entries)) return
+        do k = 1, size(modes_entries)
+            if (modes_entries(k)%active()) s = s//modes_entries(k)%text
+        end do
+    end function mode_line_modes_prefix
+
     !> The modes part of buffer BI's mode line: `mode_name', " Narrow"
     !> if the buffer is narrowed (%n), and the lighters of
     !> `minor_mode_alist' whose variables are non-nil there.
@@ -1531,14 +1714,33 @@ contains
         type(status_type) :: st
         integer :: i, n, nchars, before
         logical :: on
+        type(mode_line_part_type), allocatable :: parts(:)
+        integer :: e
         if (allocated(buffers(bi)%mode_name)) then
             modes = buffers(bi)%mode_name
         else
             modes = "Fundamental"
         end if
-        if (buffers(bi)%begv > 1 .or. buffers(bi)%zv < buffers(bi)%text%z) modes = modes//" Narrow"
-        allocate (all_spans(max(1, n_lighters)), all_faces(max(1, n_lighters)))
+        ! mode-line-process.
+        e = process_entry_of(bi)
         n = 0
+        if (e > 0) then
+            parts = process_entries(e)%parts
+        else
+            allocate (parts(0))
+        end if
+        allocate (all_spans(max(1, n_lighters + size(parts))), all_faces(max(1, n_lighters + size(parts))))
+        do i = 1, size(parts)
+            call decode_string(modes, chars, before)
+            modes = modes//expand_process_part(bi, parts(i)%text)
+            if (len(parts(i)%face) > 0) then
+                call decode_string(modes, chars, nchars)
+                n = n + 1
+                all_spans(n) = face_span_type(first=before + 1, last=nchars)
+                all_faces(n) = parts(i)%face
+            end if
+        end do
+        if (buffers(bi)%begv > 1 .or. buffers(bi)%zv < buffers(bi)%text%z) modes = modes//" Narrow"
         do i = 1, n_lighters
             if (associated(lighters(i)%active)) then
                 on = lighters(i)%active()
@@ -1593,7 +1795,8 @@ contains
         call mode_line_modes_faces(bi, modes, spans, faces)
         text = mode_line_text(buffers(bi)%name, modified, buffers(bi)%read_only, &
                               mode_line_percent(bi, start, w%window_end_valid), &
-                              mode_line_line(bi, start, pt, w%total_lines), width, modes, gui)
+                              mode_line_line(bi, start, pt, w%total_lines), width, modes, gui, &
+                              mode_line_modes_prefix())
         face_id = MODE_LINE_INACTIVE_FACE_ID
         if (selected) face_id = MODE_LINE_ACTIVE_FACE_ID
         id_face = merge_faces(f, "mode_line_buffer_id", 0_int32, face_id)

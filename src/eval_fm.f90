@@ -55,6 +55,7 @@ module eval_fm
 
     public :: funcall_noargs, kill_local_hooks
     public :: change_function, after_change_function, position_function, region_function, region_entry_type
+    public :: string_function, string_filter_function
 
     abstract interface
         !> A function of a `change_hook_type' hook such as
@@ -98,6 +99,27 @@ module eval_fm
             integer(int64), intent(out) :: done_beg, done_end
             type(status_type), intent(out) :: status
         end subroutine region_function
+
+        !> A function of a `string_hook_type' hook such as
+        !> `comint_output_filter_functions': STRING is the text it is
+        !> about.
+        subroutine string_function(string, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: string
+            type(status_type), intent(out) :: status
+        end subroutine string_function
+
+        !> A function of a `string_filter_hook_type' hook such as
+        !> `comint_preoutput_filter_functions': RESULT is STRING
+        !> transformed (perhaps STRING itself).
+        subroutine string_filter_function(string, result, status)
+            import :: status_type
+            implicit none(type, external)
+            character(len=*), intent(in) :: string
+            character(len=:), allocatable, intent(out) :: result
+            type(status_type), intent(out) :: status
+        end subroutine string_filter_function
     end interface
 
     !> A function of a `region_hook_type' hook, as `region_hook_functions'
@@ -116,6 +138,8 @@ module eval_fm
         procedure(after_change_function), pointer, nopass :: after_change_fn => null()
         procedure(position_function), pointer, nopass :: position_fn => null()
         procedure(region_function), pointer, nopass :: region_fn => null()
+        procedure(string_function), pointer, nopass :: string_fn => null()
+        procedure(string_filter_function), pointer, nopass :: string_filter_fn => null()
         integer :: depth = 0
         logical :: is_t = .false.
     end type hook_entry_type
@@ -245,6 +269,35 @@ module eval_fm
         procedure :: member => region_hook_member
     end type region_hook_type
 
+    !> A hook of functions taking a string (`string_function'), like
+    !> `comint_output_filter_functions'.
+    type, extends(hook_base_type), public :: string_hook_type
+    contains
+        !> Add a function to the hook (subr.el's add-hook).
+        procedure :: add => string_hook_add
+        !> Remove a function from the hook (subr.el's remove-hook).
+        procedure :: remove => string_hook_remove
+        !> Run the hook's functions with a string (run-hook-with-args).
+        procedure :: run => string_hook_run
+        !> Whether FN is one of the functions run in the current buffer.
+        procedure :: member => string_hook_member
+    end type string_hook_type
+
+    !> A hook of functions each transforming a string
+    !> (`string_filter_function'), like `comint_preoutput_filter_functions'.
+    type, extends(hook_base_type), public :: string_filter_hook_type
+    contains
+        !> Add a function to the hook (subr.el's add-hook).
+        procedure :: add => string_filter_hook_add
+        !> Remove a function from the hook (subr.el's remove-hook).
+        procedure :: remove => string_filter_hook_remove
+        !> Pass a string through the hook's functions in turn, each given
+        !> what the previous one returned.
+        procedure :: run => string_filter_hook_run
+        !> Whether FN is one of the functions run in the current buffer.
+        procedure :: member => string_filter_hook_member
+    end type string_filter_hook_type
+
     !> Normal hook run before changing the major mode of a buffer.
     !> The function `kill_all_local_variables' runs this before doing
     !> anything else.  Port of buffer.c change-major-mode-hook.
@@ -283,6 +336,10 @@ contains
             if (associated(b%position_fn)) same = associated(a%position_fn, b%position_fn)
         else if (associated(a%region_fn)) then
             if (associated(b%region_fn)) same = associated(a%region_fn, b%region_fn)
+        else if (associated(a%string_fn)) then
+            if (associated(b%string_fn)) same = associated(a%string_fn, b%string_fn)
+        else if (associated(a%string_filter_fn)) then
+            if (associated(b%string_filter_fn)) same = associated(a%string_filter_fn, b%string_filter_fn)
         end if
     end function same_function
 
@@ -1007,4 +1064,138 @@ contains
             n = n + 1
         end subroutine push
     end function region_hook_functions
+
+    !> The entries run in the current buffer, in order: the buffer's own,
+    !> with the global ones in place of `t' (copies, in case a function
+    !> changes the hook).
+    function effective_entries(self) result(run)
+        class(hook_base_type), intent(in) :: self
+        type(hook_entry_type), allocatable :: run(:)
+        type(hook_entry_type), allocatable :: entries(:)
+        logical, allocatable :: keep(:)
+        integer :: i, k
+        allocate (run(0))
+        k = local_index(self)
+        if (k > 0) then
+            entries = self%locals(k)%entries
+        else if (allocated(self%entries)) then
+            entries = self%entries
+        else
+            return
+        end if
+        do i = 1, size(entries)
+            if (entries(i)%is_t) then
+                ! In a global value, t should not occur.  If it does, we
+                ! must ignore it to avoid an endless loop.
+                if (.not. allocated(self%entries)) cycle
+                allocate (keep(size(self%entries)))
+                keep = .not. self%entries%is_t
+                run = [run, pack(self%entries, keep)]
+                deallocate (keep)
+            else
+                run = [run, entries(i)]
+            end if
+        end do
+    end function effective_entries
+
+    !> Add FN to the hook, as `hook_add' does.  Port of subr.el:add-hook.
+    subroutine string_hook_add(self, fn, depth, local)
+        class(string_hook_type), intent(inout), target :: self
+        procedure(string_function) :: fn
+        integer, intent(in), optional :: depth
+        logical, intent(in), optional :: local
+        type(hook_entry_type) :: e
+        e%string_fn => fn
+        call self%add_entry(e, depth, local)
+    end subroutine string_hook_add
+
+    !> Remove FN from the hook, as `hook_remove' does.
+    !> Port of subr.el:remove-hook.
+    subroutine string_hook_remove(self, fn, local)
+        class(string_hook_type), intent(inout) :: self
+        procedure(string_function) :: fn
+        logical, intent(in), optional :: local
+        type(hook_entry_type) :: e
+        e%string_fn => fn
+        call self%remove_entry(e, local)
+    end subroutine string_hook_remove
+
+    !> Call each function of the hook with STRING, in order, stopping at
+    !> the first error; buffers' own functions as `hook_run'.  Port of
+    !> eval.c:Frun_hook_with_args.
+    recursive subroutine string_hook_run(self, string, status)
+        class(string_hook_type), intent(in) :: self
+        character(len=*), intent(in) :: string
+        type(status_type), intent(out) :: status
+        type(hook_entry_type), allocatable :: entries(:)
+        integer :: i
+        status = status_type()
+        entries = effective_entries(self)
+        do i = 1, size(entries)
+            if (.not. associated(entries(i)%string_fn)) cycle
+            call entries(i)%string_fn(string, status)
+            if (.not. status%ok()) return
+        end do
+    end subroutine string_hook_run
+
+    logical function string_hook_member(self, fn) result(found)
+        class(string_hook_type), intent(in) :: self
+        procedure(string_function) :: fn
+        type(hook_entry_type) :: e
+        e%string_fn => fn
+        found = self%member_entry(e)
+    end function string_hook_member
+
+    !> Add FN to the hook, as `hook_add' does.  Port of subr.el:add-hook.
+    subroutine string_filter_hook_add(self, fn, depth, local)
+        class(string_filter_hook_type), intent(inout), target :: self
+        procedure(string_filter_function) :: fn
+        integer, intent(in), optional :: depth
+        logical, intent(in), optional :: local
+        type(hook_entry_type) :: e
+        e%string_filter_fn => fn
+        call self%add_entry(e, depth, local)
+    end subroutine string_filter_hook_add
+
+    !> Remove FN from the hook, as `hook_remove' does.
+    !> Port of subr.el:remove-hook.
+    subroutine string_filter_hook_remove(self, fn, local)
+        class(string_filter_hook_type), intent(inout) :: self
+        procedure(string_filter_function) :: fn
+        logical, intent(in), optional :: local
+        type(hook_entry_type) :: e
+        e%string_filter_fn => fn
+        call self%remove_entry(e, local)
+    end subroutine string_filter_hook_remove
+
+    !> Give STRING to the first function of the hook, what it returns to
+    !> the next, and so on; RESULT is what the last one returns (STRING if
+    !> there are none).  Stops at the first error.  A `t' in a buffer's own
+    !> value runs the default functions there.
+    recursive subroutine string_filter_hook_run(self, string, result, status)
+        class(string_filter_hook_type), intent(in) :: self
+        character(len=*), intent(in) :: string
+        character(len=:), allocatable, intent(out) :: result
+        type(status_type), intent(out) :: status
+        type(hook_entry_type), allocatable :: entries(:)
+        character(len=:), allocatable :: next
+        integer :: i
+        status = status_type()
+        result = string
+        entries = effective_entries(self)
+        do i = 1, size(entries)
+            if (.not. associated(entries(i)%string_filter_fn)) cycle
+            call entries(i)%string_filter_fn(result, next, status)
+            if (.not. status%ok()) return
+            call move_alloc(next, result)
+        end do
+    end subroutine string_filter_hook_run
+
+    logical function string_filter_hook_member(self, fn) result(found)
+        class(string_filter_hook_type), intent(in) :: self
+        procedure(string_filter_function) :: fn
+        type(hook_entry_type) :: e
+        e%string_filter_fn => fn
+        found = self%member_entry(e)
+    end function string_filter_hook_member
 end module eval_fm

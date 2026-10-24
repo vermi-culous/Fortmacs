@@ -72,6 +72,9 @@ submodule(data_fm) data_buffer_fm
     !> per-buffer fields of buffer_type (always local, like buffer.c's
     !> slots with a local flag of -1).
     integer, parameter :: NFWD = 27
+    !> Settings forwarded with `forward_setting' come after this index
+    !> (EXT_BASE + their index).
+    integer, parameter :: EXT_BASE = 100000
     character(len=*), parameter :: FWD_NAMES(NFWD) = [character(len=32) :: &
                                                 "fill_column", "left_margin", "tab_width", "indent_tabs_mode", "case_fold_search", &
                                                       "fill_prefix", "paragraph_start", "paragraph_separate", "sentence_end", &
@@ -127,10 +130,26 @@ contains
                     exit
                 end if
             end do
+            if (symbols(id)%fwd < 0) call resolve_forwarded(id)
             if (symbols(id)%fwd < 0) call resolve_minor_mode(id)
         end if
         k = symbols(id)%fwd
     end function resolve
+
+    !> Forward symbol ID to the setting forwarded with `forward_setting'
+    !> under its name, if any.
+    subroutine resolve_forwarded(id)
+        integer(int64), intent(in) :: id
+        integer :: i
+        if (.not. allocated(forwarded)) return
+        do i = 1, size(forwarded)
+            if (symbols(id)%name == trim(forwarded(i)%p%name)) then
+                symbols(id)%fwd = EXT_BASE + i
+                if (forwarded(i)%local_if_set) symbols(id)%local_if_set = .true.
+                return
+            end if
+        end do
+    end subroutine resolve_forwarded
 
     !> Forward symbol ID to the state of the minor mode of that name, if
     !> the mode keeps its own state: its variable is buffer-local when
@@ -154,7 +173,16 @@ contains
         integer :: k
         kind = 0
         k = resolve(id)
-        if (k > NFWD) then
+        if (k >= EXT_BASE) then
+            select type (p => forwarded(k - EXT_BASE)%p)
+            type is (integer_setting)
+                kind = K_INT64
+            type is (string_setting)
+                kind = K_STRING
+            class default
+                kind = K_BOOL
+            end select
+        else if (k > NFWD) then
             kind = K_BOOL
         else if (k > 0) then
             kind = FWD_KIND(k)
@@ -284,6 +312,19 @@ contains
         logical, intent(out) :: bound
         type(minor_mode_type), pointer :: m
         bound = .true.
+        if (k >= EXT_BASE) then
+            select type (p => forwarded(k - EXT_BASE)%p)
+            type is (integer_setting)
+                call setting_value(p, make_fixnum(p%value), v, bound)
+            type is (logical_setting)
+                call setting_value(p, bool_value(p%value), v, bound)
+            type is (string_setting)
+                call setting_value(p, string_or_nil(p%value), v, bound)
+            class default
+                v = nil()
+            end select
+            return
+        end if
         if (k > NFWD) then
             m => minor_mode_at(k - NFWD)
             call setting_value(m%state, bool_value(m%state%value), v, bound)
@@ -385,6 +426,18 @@ contains
         type(status_type), intent(out) :: status
         type(minor_mode_type), pointer :: m
         status = status_type()
+        if (k >= EXT_BASE) then
+            select type (p => forwarded(k - EXT_BASE)%p)
+            type is (integer_setting)
+                call set_integer(p, v, .false., status)
+            type is (logical_setting)
+                call set_logical(p, v)
+            type is (string_setting)
+                call set_string(p, v)
+            class default
+            end select
+            return
+        end if
         if (k > NFWD) then
             m => minor_mode_at(k - NFWD)
             call set_logical(m%state, v)
@@ -552,6 +605,10 @@ contains
         type(status_type), intent(out) :: status
         type(minor_mode_type), pointer :: m
         status = status_type()
+        if (k >= EXT_BASE) then
+            forwarded(k - EXT_BASE)%p%void = .true.
+            return
+        end if
         if (k > NFWD) then
             m => minor_mode_at(k - NFWD)
             m%state%void = .true.
